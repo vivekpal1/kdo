@@ -1,24 +1,39 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to kdo are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2026-04-13
+## [Unreleased]
+
+## [0.1.0-alpha.1] - 2026-04-13
+
+First public alpha. Expect breakage. API surface is not stable.
 
 ### Added
 
-- Workspace discovery with parallel manifest parsing
-- Manifest parsers for Cargo.toml, package.json, pyproject.toml, Anchor.toml
-- Dependency graph via petgraph with DFS/BFS queries
-- Cycle detection with diagnostic reporting
+- `kdo init` — workspace discovery and scaffolding
+- `kdo new` — interactive project scaffolding for Rust, TypeScript, Python, Solana Anchor, Go
+- `kdo run <task>` — task execution in topological order, with `--parallel`
+- `kdo exec <command>` — arbitrary command in each project, with `--parallel`
+- `kdo list` / `kdo graph` / `kdo context` / `kdo affected`
+- `kdo doctor` — workspace health check
+- `kdo completions <shell>` — bash, zsh, fish, powershell
+- `kdo serve` — MCP server over stdio with 7 tools:
+  `kdo_list_projects`, `kdo_get_context`, `kdo_read_symbol`,
+  `kdo_dep_graph`, `kdo_affected`, `kdo_search_code`, `kdo_run_task`
+- `kdo.toml` workspace config (committed) and `.kdo/` cache (gitignored)
+- `.kdoignore` for context exclusion rules
+- Manifest parsers for Cargo.toml, package.json, pyproject.toml, Anchor.toml, go.mod
+- Dependency graph via petgraph with DFS/BFS queries and cycle detection
 - Blake3 content hashing (parallelized, deterministic)
-- Tree-sitter signature extraction for Rust, TypeScript, Python
+- Tree-sitter signature extraction for Rust, TypeScript, Python; line-based extraction for Go
 - Token-budgeted CONTEXT.md generation
-- MCP server (JSON-RPC 2.0 over stdio) with 5 tools
-- CLI with `init`, `list`, `graph`, `context`, `affected`, `serve` commands
 - JSON output mode on all commands (`--format json`)
 - `.gitignore` and `.kdoignore` support via the `ignore` crate
+- Colored CLI output (owo-colors) and progress bars (indicatif)
+- Integration test suite against `fixtures/sample-monorepo`
 
-[0.1.0]: https://github.com/vivekpal1/kdo/releases/tag/v0.1.0
+[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/vivekpal1/kdo/releases/tag/v0.1.0-alpha.1
