@@ -7,7 +7,7 @@ kdo scans your workspace, builds a dependency graph, and serves structured conte
 ## Install
 
 ```bash
-cargo install --git https://github.com/vivekpal0x/kdo
+cargo install --git https://github.com/vivekpal1/kdo
 ```
 
 ## Quick start
