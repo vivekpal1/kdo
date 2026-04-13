@@ -1,8 +1,16 @@
 [package]
 name = "kdo-cli"
+description = "CLI binary for the kdo workspace manager"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+publish = false
 
 [[bin]]
 name = "kdo"

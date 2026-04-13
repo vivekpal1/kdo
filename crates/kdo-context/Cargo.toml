@@ -1,8 +1,16 @@
 [package]
 name = "kdo-context"
+description = "Tree-sitter signature extraction and token-budgeted context generation"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
 
 [dependencies]
 kdo-core = { path = "../kdo-core" }
