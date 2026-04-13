@@ -125,6 +125,45 @@ pub enum KdoError {
     Io(#[from] std::io::Error),
 }
 
+/// Workspace configuration parsed from `kdo.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkspaceConfig {
+    /// Workspace metadata.
+    pub workspace: WorkspaceMeta,
+    /// Named tasks that can be run via `kdo run <name>`.
+    #[serde(default)]
+    pub tasks: std::collections::BTreeMap<String, String>,
+}
+
+/// Workspace metadata section of `kdo.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkspaceMeta {
+    /// Workspace name.
+    #[serde(default)]
+    pub name: String,
+}
+
+impl WorkspaceConfig {
+    /// Load workspace config from a `kdo.toml` file.
+    pub fn load(path: &std::path::Path) -> Result<Self, KdoError> {
+        let content = std::fs::read_to_string(path)?;
+        toml::from_str(&content).map_err(|e| KdoError::ParseError {
+            path: path.to_path_buf(),
+            source: e.into(),
+        })
+    }
+
+    /// Write workspace config to a `kdo.toml` file.
+    pub fn save(&self, path: &std::path::Path) -> Result<(), KdoError> {
+        let content = toml::to_string_pretty(self).map_err(|e| KdoError::ParseError {
+            path: path.to_path_buf(),
+            source: e.into(),
+        })?;
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+}
+
 /// Rough token estimator: ~4 characters per token for English/code.
 ///
 /// # Examples

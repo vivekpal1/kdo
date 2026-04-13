@@ -1,9 +1,12 @@
+# kdo workspace configuration
+# https://github.com/vivekpal1/kdo
+#
+# Projects: vault-tool, vault_program, vault-program, vault-sdk, common-lib
+
 [workspace]
 name = "sample-monorepo"
 
-[projects]
-# vault-tool (python)
-# vault_program (anchor)
-# vault-program (rust)
-# vault-sdk (typescript)
-# common-lib (rust)
+[tasks]
+build = "echo 'no build configured'"
+lint = "echo 'no lint configured'"
+test = "echo 'no test configured'"

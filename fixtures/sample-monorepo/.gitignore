@@ -1,0 +1,20 @@
+
+# kdo
+.kdo/
+TODO.md
+
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store

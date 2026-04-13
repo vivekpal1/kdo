@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Solana vault program. Handles deposits, withdrawals, fee accrual."
 
+[workspace]
+
 [dependencies]
 common-lib = { path = "../../common-lib" }

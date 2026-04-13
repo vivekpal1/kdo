@@ -31,3 +31,7 @@ tarpaulin-report.html
 
 # Docker
 docker-compose.override.yml
+
+# kdo
+.kdo/
+TODO.md

@@ -136,6 +136,18 @@ impl McpServer {
                     "required": []
                 }),
             },
+            ToolDef {
+                name: "kdo_search_code".into(),
+                description: "Search for a pattern across all workspace source files. Returns matching lines with file:line context.".into(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "pattern": { "type": "string", "description": "Search pattern (substring match)" },
+                        "project": { "type": "string", "description": "Limit search to this project (optional)" }
+                    },
+                    "required": ["pattern"]
+                }),
+            },
         ];
 
         Ok(serde_json::json!({ "tools": tools }))
@@ -159,6 +171,7 @@ impl McpServer {
             "kdo_read_symbol" => self.tool_read_symbol(&arguments),
             "kdo_dep_graph" => self.tool_dep_graph(&arguments),
             "kdo_affected" => self.tool_affected(&arguments),
+            "kdo_search_code" => self.tool_search_code(&arguments),
             _ => Err(jsonrpc_error(-32602, &format!("unknown tool: {name}"))),
         }
     }
@@ -232,6 +245,70 @@ impl McpServer {
         let json = serde_json::to_string_pretty(&projects)
             .map_err(|e| jsonrpc_error(-32603, &e.to_string()))?;
         Ok(tool_result_text(&json))
+    }
+
+    fn tool_search_code(&self, args: &Value) -> Result<Value, Value> {
+        let pattern = args
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpc_error(-32602, "missing 'pattern' argument"))?;
+        let project_filter = args.get("project").and_then(|v| v.as_str());
+
+        let projects: Vec<&kdo_core::Project> = if let Some(name) = project_filter {
+            match self.graph.get_project(name) {
+                Ok(p) => vec![p],
+                Err(e) => return Err(jsonrpc_error(-32602, &e.to_string())),
+            }
+        } else {
+            self.graph.projects()
+        };
+
+        let mut results = Vec::new();
+        let max_results = 50;
+
+        'outer: for project in &projects {
+            let walker = ignore::WalkBuilder::new(&project.path)
+                .hidden(true)
+                .git_ignore(true)
+                .add_custom_ignore_filename(".kdoignore")
+                .build();
+
+            for entry in walker.flatten() {
+                if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                    continue;
+                }
+                let path = entry.path();
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if !matches!(
+                    ext,
+                    "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "toml" | "json"
+                ) {
+                    continue;
+                }
+
+                if let Ok(content) = std::fs::read_to_string(path) {
+                    for (i, line) in content.lines().enumerate() {
+                        if line.contains(pattern) {
+                            let rel_path = path
+                                .strip_prefix(&self.graph.root)
+                                .unwrap_or(path)
+                                .display();
+                            results.push(format!("{}:{}:{}", rel_path, i + 1, line.trim()));
+                            if results.len() >= max_results {
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if results.is_empty() {
+            Ok(tool_result_text(&format!("no matches for '{pattern}'")))
+        } else {
+            let header = format!("{} matches for '{pattern}':\n\n", results.len());
+            Ok(tool_result_text(&format!("{header}{}", results.join("\n"))))
+        }
     }
 }
 

@@ -70,7 +70,7 @@ impl WorkspaceGraph {
                 // Skip node_modules, target, .git, etc.
                 !matches!(
                     name.as_ref(),
-                    "node_modules" | "target" | ".git" | "dist" | "build" | "__pycache__"
+                    "node_modules" | "target" | ".git" | ".kdo" | "dist" | "build" | "__pycache__"
                 )
             })
             .build();
