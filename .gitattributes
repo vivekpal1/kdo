@@ -1,0 +1,19 @@
+# Normalize line endings
+* text=auto
+
+# Rust sources
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Windows scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary

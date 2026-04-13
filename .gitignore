@@ -1,6 +1,33 @@
+# Build
 /target
 **/*.rs.bk
-Cargo.lock
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
 *.swp
 *.swo
-.DS_Store
+*~
+.vscode/
+.idea/
+*.iml
+
+# Coverage & profiling
+*.profraw
+*.profdata
+lcov.info
+coverage/
+tarpaulin-report.html
+
+# Debug
+*.pdb
+*.dSYM/
+
+# Docker
+docker-compose.override.yml
