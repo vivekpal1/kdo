@@ -1,0 +1,10 @@
+{
+  "name": "vault-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for interacting with the vault program.",
+  "main": "src/index.ts",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {}
+}

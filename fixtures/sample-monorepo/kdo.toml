@@ -1,0 +1,9 @@
+[workspace]
+name = "sample-monorepo"
+
+[projects]
+# vault-tool (python)
+# vault_program (anchor)
+# vault-program (rust)
+# vault-sdk (typescript)
+# common-lib (rust)

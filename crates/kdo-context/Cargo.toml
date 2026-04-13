@@ -1,0 +1,19 @@
+[package]
+name = "kdo-context"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kdo-core = { path = "../kdo-core" }
+kdo-graph = { path = "../kdo-graph" }
+tree-sitter = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-python = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+miette = { workspace = true }
+anyhow = { workspace = true }
+ignore = { workspace = true }
