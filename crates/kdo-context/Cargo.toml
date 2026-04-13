@@ -1,20 +1,19 @@
 [package]
 name = "kdo-context"
-description = "Tree-sitter signature extraction and token-budgeted context generation"
+description = "Internal crate for kdo — tree-sitter signature extraction and token-budgeted context generation. Not intended for direct use; API may change without notice."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
 
 [dependencies]
-kdo-core = { path = "../kdo-core" }
-kdo-graph = { path = "../kdo-graph" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.1" }
+kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.1" }
 tree-sitter = { workspace = true }
 tree-sitter-rust = { workspace = true }
 tree-sitter-typescript = { workspace = true }

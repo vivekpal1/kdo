@@ -1,20 +1,19 @@
 [package]
 name = "kdo-graph"
-description = "Workspace dependency graph with discovery, traversal, and content hashing"
+description = "Internal crate for kdo — workspace dependency graph, discovery, traversal, content hashing. Not intended for direct use; API may change without notice."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
 
 [dependencies]
-kdo-core = { path = "../kdo-core" }
-kdo-resolver = { path = "../kdo-resolver" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.1" }
+kdo-resolver = { path = "../kdo-resolver", version = "=0.1.0-alpha.1" }
 petgraph = { workspace = true }
 blake3 = { workspace = true }
 ignore = { workspace = true }
@@ -27,5 +26,5 @@ anyhow = { workspace = true }
 indexmap = { workspace = true }
 
 [dev-dependencies]
-kdo-core = { path = "../kdo-core" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.1" }
 serde_json = { workspace = true }

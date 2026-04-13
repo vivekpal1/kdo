@@ -1,19 +1,18 @@
 [package]
 name = "kdo-resolver"
-description = "Manifest parsers for polyglot workspaces (Cargo, Node, Python, Anchor)"
+description = "Internal crate for kdo — manifest parsers (Cargo, Node, Python, Anchor, Go). Not intended for direct use; API may change without notice."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
 
 [dependencies]
-kdo-core = { path = "../kdo-core" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.1" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

@@ -443,8 +443,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kdo-cli"
-version = "0.1.0"
+name = "kdo"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -469,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "kdo-context"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "ignore",
@@ -487,7 +487,7 @@ dependencies = [
 
 [[package]]
 name = "kdo-core"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "miette",
@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "kdo-graph"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -517,7 +517,7 @@ dependencies = [
 
 [[package]]
 name = "kdo-mcp"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "ignore",
@@ -532,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "kdo-resolver"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "kdo-core",

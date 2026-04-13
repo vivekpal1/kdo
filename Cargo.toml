@@ -4,13 +4,12 @@ members = ["crates/*"]
 exclude = ["fixtures"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
 repository = "https://github.com/vivekpal1/kdo"
 homepage = "https://github.com/vivekpal1/kdo"
-documentation = "https://docs.rs/kdo-core"
 authors = ["Vivek Pal"]
 keywords = ["workspace", "monorepo", "mcp", "context", "polyglot"]
 categories = ["development-tools", "command-line-utilities"]

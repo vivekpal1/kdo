@@ -1,13 +1,12 @@
 [package]
 name = "kdo-core"
-description = "Core types and error definitions for the kdo workspace manager"
+description = "Internal crate for kdo — core types and errors. Not intended for direct use; API may change without notice."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"

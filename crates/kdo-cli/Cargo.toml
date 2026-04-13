@@ -1,6 +1,6 @@
 [package]
-name = "kdo-cli"
-description = "CLI binary for the kdo workspace manager"
+name = "kdo"
+description = "Context-native workspace manager for AI coding agents. Cuts token consumption on polyglot monorepos."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,17 +10,16 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
-publish = false
 
 [[bin]]
 name = "kdo"
 path = "src/main.rs"
 
 [dependencies]
-kdo-core = { path = "../kdo-core" }
-kdo-graph = { path = "../kdo-graph" }
-kdo-context = { path = "../kdo-context" }
-kdo-mcp = { path = "../kdo-mcp" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.1" }
+kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.1" }
+kdo-context = { path = "../kdo-context", version = "=0.1.0-alpha.1" }
+kdo-mcp = { path = "../kdo-mcp", version = "=0.1.0-alpha.1" }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 serde = { workspace = true }
