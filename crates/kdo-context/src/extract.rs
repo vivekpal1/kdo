@@ -56,6 +56,7 @@ pub fn extract_signatures(file_path: &Path, language: &Language) -> Vec<Signatur
         Language::Rust | Language::Anchor => extract_rust_signatures(&content, &file_str),
         Language::TypeScript | Language::JavaScript => extract_ts_signatures(&content, &file_str),
         Language::Python => extract_python_signatures(&content, &file_str),
+        Language::Go => extract_go_signatures(&content, &file_str),
     }
 }
 
@@ -470,6 +471,71 @@ fn fallback_python_extract(source: &str, file: &str) -> Vec<Signature> {
                 file: file.to_string(),
                 line: i + 1,
             });
+        }
+    }
+    sigs
+}
+
+/// Go signature extractor — line-based (no Go tree-sitter grammar bundled).
+///
+/// Extracts exported functions (`func Foo`), types (`type Foo`), and interfaces.
+fn extract_go_signatures(source: &str, file: &str) -> Vec<Signature> {
+    let mut sigs = Vec::new();
+    for (i, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        // Exported function: "func Foo(" or "func (r Receiver) Foo("
+        if trimmed.starts_with("func ") {
+            // Exported if the function name starts with uppercase
+            let is_exported = trimmed
+                .trim_start_matches("func ")
+                .trim_start_matches('(') // skip receiver
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+                // Also check after closing paren of receiver
+                || {
+                    if let Some(close) = trimmed.find(')') {
+                        trimmed[close..]
+                            .trim_start_matches(')')
+                            .trim()
+                            .chars()
+                            .next()
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    }
+                };
+            if is_exported {
+                // Signature up to opening `{`
+                let sig = trimmed.trim_end_matches('{').trim().to_string();
+                sigs.push(Signature {
+                    kind: SignatureKind::Function,
+                    text: sig,
+                    file: file.to_string(),
+                    line: i + 1,
+                });
+            }
+        } else if trimmed.starts_with("type ") {
+            // Exported types and interfaces
+            let rest = trimmed.trim_start_matches("type ").trim();
+            let first_char = rest.chars().next().unwrap_or(' ');
+            if first_char.is_uppercase() {
+                let kind = if rest.contains("interface") {
+                    SignatureKind::Trait
+                } else if rest.contains("struct") {
+                    SignatureKind::Struct
+                } else {
+                    SignatureKind::Constant
+                };
+                sigs.push(Signature {
+                    kind,
+                    text: trimmed.trim_end_matches('{').trim().to_string(),
+                    file: file.to_string(),
+                    line: i + 1,
+                });
+            }
         }
     }
     sigs

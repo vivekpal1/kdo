@@ -10,6 +10,37 @@ use std::io::{self, BufRead, Write};
 use std::sync::Arc;
 use tracing::{debug, error};
 
+// Pull in task resolution from kdo-resolver's language defaults.
+// We re-implement a minimal version here to avoid a circular dep on kdo-cli.
+fn resolve_default_task(language: &kdo_core::Language, task_name: &str) -> Option<String> {
+    match language {
+        kdo_core::Language::Rust | kdo_core::Language::Anchor => match task_name {
+            "build" => Some("cargo build".into()),
+            "test" => Some("cargo test".into()),
+            "lint" => Some("cargo clippy".into()),
+            "fmt" => Some("cargo fmt".into()),
+            _ => None,
+        },
+        kdo_core::Language::TypeScript | kdo_core::Language::JavaScript => match task_name {
+            "build" => Some("npm run build".into()),
+            "test" => Some("npm test".into()),
+            "lint" => Some("npm run lint".into()),
+            _ => None,
+        },
+        kdo_core::Language::Python => match task_name {
+            "test" => Some("python3 -m pytest".into()),
+            "lint" => Some("ruff check .".into()),
+            _ => None,
+        },
+        kdo_core::Language::Go => match task_name {
+            "build" => Some("go build ./...".into()),
+            "test" => Some("go test ./...".into()),
+            "lint" => Some("golangci-lint run".into()),
+            _ => None,
+        },
+    }
+}
+
 /// Tool definition for MCP tools/list response.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -148,6 +179,18 @@ impl McpServer {
                     "required": ["pattern"]
                 }),
             },
+            ToolDef {
+                name: "kdo_run_task".into(),
+                description: "Execute a build/test/lint task in a workspace project. Returns stdout+stderr and exit status. Use for CI checks or triggering builds from agent context.".into(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task": { "type": "string", "description": "Task name: build, test, lint, fmt, check, clean" },
+                        "project": { "type": "string", "description": "Project name to run in (required)" }
+                    },
+                    "required": ["task", "project"]
+                }),
+            },
         ];
 
         Ok(serde_json::json!({ "tools": tools }))
@@ -172,6 +215,7 @@ impl McpServer {
             "kdo_dep_graph" => self.tool_dep_graph(&arguments),
             "kdo_affected" => self.tool_affected(&arguments),
             "kdo_search_code" => self.tool_search_code(&arguments),
+            "kdo_run_task" => self.tool_run_task(&arguments),
             _ => Err(jsonrpc_error(-32602, &format!("unknown tool: {name}"))),
         }
     }
@@ -309,6 +353,45 @@ impl McpServer {
             let header = format!("{} matches for '{pattern}':\n\n", results.len());
             Ok(tool_result_text(&format!("{header}{}", results.join("\n"))))
         }
+    }
+
+    fn tool_run_task(&self, args: &Value) -> Result<Value, Value> {
+        let task = args
+            .get("task")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpc_error(-32602, "missing 'task' argument"))?;
+        let project_name = args
+            .get("project")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpc_error(-32602, "missing 'project' argument"))?;
+
+        let project = self
+            .graph
+            .get_project(project_name)
+            .map_err(|e| jsonrpc_error(-32602, &e.to_string()))?;
+
+        let cmd = resolve_default_task(&project.language, task).ok_or_else(|| {
+            jsonrpc_error(-32602, &format!("no '{task}' task for {project_name}"))
+        })?;
+
+        debug!(project = project_name, task, cmd = %cmd, "running task");
+
+        let output = std::process::Command::new("sh")
+            .args(["-c", &cmd])
+            .current_dir(&project.path)
+            .output()
+            .map_err(|e| jsonrpc_error(-32603, &format!("failed to spawn process: {e}")))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let success = output.status.success();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        let result = format!(
+            "project: {project_name}\ntask: {task}\ncommand: {cmd}\nexit_code: {exit_code}\nsuccess: {success}\n\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+        );
+
+        Ok(tool_result_text(&result))
     }
 }
 

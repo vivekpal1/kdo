@@ -25,3 +25,7 @@ tracing = { workspace = true }
 miette = { workspace = true }
 anyhow = { workspace = true }
 indexmap = { workspace = true }
+
+[dev-dependencies]
+kdo-core = { path = "../kdo-core" }
+serde_json = { workspace = true }

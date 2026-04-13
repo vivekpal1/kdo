@@ -320,6 +320,17 @@ impl WorkspaceGraph {
         })
     }
 
+    /// Return all projects in topological order (dependencies before dependents).
+    ///
+    /// Falls back to insertion order if the graph has cycles (which `detect_cycles` should
+    /// have caught earlier).
+    pub fn topological_order(&self) -> Vec<&Project> {
+        match petgraph::algo::toposort(&self.graph, None) {
+            Ok(indices) => indices.iter().map(|idx| &self.graph[*idx]).collect(),
+            Err(_) => self.projects(),
+        }
+    }
+
     /// Find projects affected by changes since a git ref.
     ///
     /// Shells out to `git diff --name-only` to find changed files,

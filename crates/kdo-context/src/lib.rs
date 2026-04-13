@@ -98,6 +98,7 @@ fn collect_source_files(
         kdo_core::Language::TypeScript => &["ts", "tsx"],
         kdo_core::Language::JavaScript => &["js", "jsx"],
         kdo_core::Language::Python => &["py"],
+        kdo_core::Language::Go => &["go"],
     };
 
     let walker = ignore::WalkBuilder::new(project_path)

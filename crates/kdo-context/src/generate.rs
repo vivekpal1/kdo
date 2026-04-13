@@ -228,6 +228,7 @@ fn collect_source_files(project_path: &Path, language: &Language) -> Vec<std::pa
         Language::TypeScript => &["ts", "tsx"],
         Language::JavaScript => &["js", "jsx"],
         Language::Python => &["py"],
+        Language::Go => &["go"],
     };
 
     let mut result = Vec::new();

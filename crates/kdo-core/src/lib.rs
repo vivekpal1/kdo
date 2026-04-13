@@ -20,6 +20,8 @@ pub enum Language {
     Python,
     /// Rust + Anchor framework (Solana)
     Anchor,
+    /// Go (go.mod)
+    Go,
 }
 
 impl std::fmt::Display for Language {
@@ -30,6 +32,7 @@ impl std::fmt::Display for Language {
             Self::JavaScript => write!(f, "javascript"),
             Self::Python => write!(f, "python"),
             Self::Anchor => write!(f, "anchor"),
+            Self::Go => write!(f, "go"),
         }
     }
 }

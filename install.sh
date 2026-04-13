@@ -6,11 +6,13 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash
 #   ./install.sh                   # build from source (requires Rust)
 #   ./install.sh --from-release    # download prebuilt binary
+#
+# Environment variables:
+#   KDO_PREFIX   Install prefix (default: auto-detect ~/.local or /usr/local)
+#   KDO_VERSION  Binary version for --from-release (default: latest)
 
-VERSION="${KDO_VERSION:-latest}"
-PREFIX="${KDO_PREFIX:-/usr/local}"
-BINDIR="${PREFIX}/bin"
 REPO="vivekpal1/kdo"
+VERSION="${KDO_VERSION:-latest}"
 
 # Colors
 RED='\033[0;31m'
@@ -21,9 +23,42 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 info()  { echo -e "${CYAN}${BOLD}kdo${RESET} $*"; }
-ok()    { echo -e "  ${GREEN}ok${RESET} $*"; }
+ok()    { echo -e "  ${GREEN}ok${RESET}   $*"; }
 err()   { echo -e "  ${RED}error${RESET} $*" >&2; }
 dim()   { echo -e "  ${DIM}$*${RESET}"; }
+step()  { echo -e "  ${BOLD}»${RESET} $*"; }
+
+# ---------------------------------------------------------------------------
+# Determine install prefix: KDO_PREFIX > ~/.local (if on PATH) > ~/.local (fallback)
+# Never try /usr/local without sudo — that just breaks.
+# ---------------------------------------------------------------------------
+resolve_prefix() {
+    if [ -n "${KDO_PREFIX:-}" ]; then
+        echo "$KDO_PREFIX"
+        return
+    fi
+
+    # Prefer ~/.local/bin if it's already on PATH
+    if echo "$PATH" | tr ':' '\n' | grep -q "$HOME/.local/bin"; then
+        echo "$HOME/.local"
+        return
+    fi
+
+    # Fall back to ~/.local/bin and remind user to update PATH
+    echo "$HOME/.local"
+}
+
+ensure_on_path() {
+    local bindir="$1"
+    if ! echo "$PATH" | tr ':' '\n' | grep -qx "$bindir"; then
+        echo ""
+        echo -e "  ${BOLD}Note:${RESET} ${bindir} is not on your PATH."
+        echo -e "  Add this to your shell profile (${DIM}~/.zshrc${RESET} or ${DIM}~/.bashrc${RESET}):"
+        echo ""
+        echo -e "    ${CYAN}export PATH=\"${bindir}:\$PATH\"${RESET}"
+        echo ""
+    fi
+}
 
 detect_platform() {
     local os arch
@@ -37,16 +72,17 @@ detect_platform() {
     esac
 
     case "$arch" in
-        x86_64)  arch="x86_64" ;;
-        aarch64|arm64) arch="aarch64" ;;
-        *)       err "unsupported architecture: $arch"; exit 1 ;;
+        x86_64)          arch="x86_64" ;;
+        aarch64 | arm64) arch="aarch64" ;;
+        *)               err "unsupported architecture: $arch"; exit 1 ;;
     esac
 
     echo "${arch}-${os}"
 }
 
 install_from_source() {
-    info "Installing from source..."
+    info "Installing kdo from source..."
+    echo ""
 
     if ! command -v cargo &>/dev/null; then
         err "Rust toolchain not found."
@@ -54,83 +90,89 @@ install_from_source() {
         echo "  Install Rust first:"
         echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
         echo ""
-        echo "  Or install from a prebuilt binary:"
+        echo "  Or install a prebuilt binary:"
         echo "    $0 --from-release"
         exit 1
     fi
 
-    local tmpdir
+    local prefix bindir tmpdir
+    prefix="$(resolve_prefix)"
+    bindir="${prefix}/bin"
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    dim "cloning repository..."
+    step "cloning repository..."
     git clone --depth 1 "https://github.com/${REPO}.git" "$tmpdir/kdo" 2>/dev/null
-    cd "$tmpdir/kdo"
 
-    dim "building release binary..."
-    cargo build --release --quiet
+    step "building release binary (this takes ~30s)..."
+    (cd "$tmpdir/kdo" && cargo build --release --quiet)
 
-    dim "installing to ${BINDIR}..."
-    install -d "$BINDIR"
-    install -m 755 target/release/kdo "$BINDIR/kdo"
+    step "installing to ${bindir}..."
+    mkdir -p "$bindir"
+    install -m 755 "$tmpdir/kdo/target/release/kdo" "$bindir/kdo"
 
-    ok "installed kdo to ${BINDIR}/kdo"
     echo ""
-    dim "$(kdo --version)"
-    echo ""
+    ok "installed kdo $("$bindir/kdo" --version) → ${bindir}/kdo"
+    ensure_on_path "$bindir"
     info "Run ${BOLD}kdo init${RESET} in your workspace to get started."
 }
 
 install_from_release() {
-    info "Installing prebuilt binary..."
+    info "Installing kdo prebuilt binary..."
+    echo ""
 
-    local platform
+    local platform prefix bindir
     platform="$(detect_platform)"
+    prefix="$(resolve_prefix)"
+    bindir="${prefix}/bin"
+
     dim "platform: ${platform}"
 
     if [ "$VERSION" = "latest" ]; then
-        dim "fetching latest release..."
-        VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')"
+        step "fetching latest release tag..."
+        VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+            | grep '"tag_name"' \
+            | sed -E 's/.*"([^"]+)".*/\1/')"
         if [ -z "$VERSION" ]; then
-            err "could not determine latest version. Try installing from source instead."
+            err "could not determine latest version."
+            echo ""
+            echo "  No GitHub releases yet? Install from source instead:"
+            echo "    $0"
             exit 1
         fi
     fi
     dim "version: ${VERSION}"
 
-    local archive="kdo-${VERSION}-${platform}.tar.gz"
-    local url="https://github.com/${REPO}/releases/download/${VERSION}/${archive}"
-
-    local tmpdir
+    local archive url tmpdir
+    archive="kdo-${VERSION}-${platform}.tar.gz"
+    url="https://github.com/${REPO}/releases/download/${VERSION}/${archive}"
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    dim "downloading ${archive}..."
+    step "downloading ${archive}..."
     if ! curl -fsSL "$url" -o "$tmpdir/$archive"; then
-        err "download failed: $url"
+        err "download failed: ${url}"
         echo ""
         echo "  No prebuilt binary for your platform? Install from source:"
         echo "    $0"
         exit 1
     fi
 
-    dim "extracting..."
+    step "extracting..."
     tar xzf "$tmpdir/$archive" -C "$tmpdir"
 
-    dim "installing to ${BINDIR}..."
-    install -d "$BINDIR"
-    install -m 755 "$tmpdir/kdo" "$BINDIR/kdo"
+    step "installing to ${bindir}..."
+    mkdir -p "$bindir"
+    install -m 755 "$tmpdir/kdo" "$bindir/kdo"
 
-    ok "installed kdo ${VERSION} to ${BINDIR}/kdo"
     echo ""
+    ok "installed kdo ${VERSION} → ${bindir}/kdo"
+    ensure_on_path "$bindir"
     info "Run ${BOLD}kdo init${RESET} in your workspace to get started."
 }
 
 main() {
     echo ""
-    info "kdo installer"
-    echo ""
-
     if [ "${1:-}" = "--from-release" ]; then
         install_from_release
     else

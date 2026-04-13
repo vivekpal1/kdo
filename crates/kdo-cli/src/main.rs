@@ -4,6 +4,7 @@ mod run;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
+use indicatif::{ProgressBar, ProgressStyle};
 use kdo_context::ContextGenerator;
 use kdo_core::WorkspaceConfig;
 use kdo_graph::WorkspaceGraph;
@@ -40,6 +41,10 @@ enum Commands {
         /// Only run in this project (name or substring match).
         #[arg(long)]
         filter: Option<String>,
+
+        /// Run independent projects in parallel.
+        #[arg(long)]
+        parallel: bool,
     },
 
     /// Run an arbitrary command in each project directory.
@@ -50,6 +55,10 @@ enum Commands {
         /// Only run in this project (name or substring match).
         #[arg(long)]
         filter: Option<String>,
+
+        /// Run in all projects in parallel.
+        #[arg(long)]
+        parallel: bool,
     },
 
     /// List all projects in the workspace.
@@ -153,8 +162,16 @@ fn main() -> miette::Result<()> {
     match cli.command {
         Commands::Init => cmd_init()?,
         Commands::New { name } => cmd_new(&name)?,
-        Commands::Run { task, filter } => cmd_run(&task, filter.as_deref())?,
-        Commands::Exec { command, filter } => cmd_exec(&command, filter.as_deref())?,
+        Commands::Run {
+            task,
+            filter,
+            parallel,
+        } => cmd_run(&task, filter.as_deref(), parallel)?,
+        Commands::Exec {
+            command,
+            filter,
+            parallel,
+        } => cmd_exec(&command, filter.as_deref(), parallel)?,
         Commands::List { format } => cmd_list(format)?,
         Commands::Graph { format } => cmd_graph(format)?,
         Commands::Context {
@@ -281,6 +298,11 @@ fn ensure_gitignore(
         additions.push_str("\n# Python\n__pycache__/\n*.pyc\n.venv/\n");
     }
 
+    // Go
+    if languages.contains(&kdo_core::Language::Go) && !existing.contains("vendor/") {
+        additions.push_str("\n# Go\nvendor/\n*.test\n");
+    }
+
     // Common
     if !existing.contains(".DS_Store") {
         additions.push_str("\n# OS\n.DS_Store\n");
@@ -302,8 +324,20 @@ fn generate_all_context(root: &Path, graph: &WorkspaceGraph) -> miette::Result<u
     let context_dir = root.join(KDO_CONTEXT_DIR);
     std::fs::create_dir_all(&context_dir).into_diagnostic()?;
 
+    let projects = graph.projects();
+    let pb = ProgressBar::new(projects.len() as u64);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "  {spinner:.cyan} context {bar:30.cyan/blue} {pos}/{len} {msg}",
+        )
+        .unwrap()
+        .progress_chars("=>-"),
+    );
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+
     let mut count = 0;
-    for project in graph.projects() {
+    for project in &projects {
+        pb.set_message(project.name.clone());
         let bundle = kdo_context::generate_context(graph, &project.name, 4096);
         if let Ok(bundle) = bundle {
             let md = kdo_context::render_context_md(&bundle);
@@ -312,7 +346,9 @@ fn generate_all_context(root: &Path, graph: &WorkspaceGraph) -> miette::Result<u
                 count += 1;
             }
         }
+        pb.inc(1);
     }
+    pb.finish_and_clear();
 
     // Cache graph snapshot
     let graph_output = graph.to_graph_output();
@@ -355,7 +391,20 @@ fn cmd_init() -> miette::Result<()> {
 
     if has_manifests {
         // Existing repo — discover and adopt
-        let graph = WorkspaceGraph::discover(&root).map_err(|e| miette::miette!("{e}"))?;
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::with_template("  {spinner:.cyan} {msg}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
+        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+        spinner.set_message("discovering workspace…");
+
+        let graph = WorkspaceGraph::discover(&root).map_err(|e| {
+            spinner.finish_and_clear();
+            miette::miette!("{e}")
+        })?;
+        spinner.finish_and_clear();
         let project_names: Vec<String> = graph.projects().iter().map(|p| p.name.clone()).collect();
         let project_count = project_names.len();
 
@@ -445,12 +494,16 @@ fn cmd_new(name: &str) -> miette::Result<()> {
         miette::bail!("directory '{}' already exists", name);
     }
 
-    let language = prompt_select("Language", &["rust", "typescript", "python", "anchor"])?;
+    let language = prompt_select(
+        "Language",
+        &["rust", "typescript", "python", "anchor", "go"],
+    )?;
     let project_type = prompt_select("Type", &["library", "binary"])?;
 
     let framework = match language.as_str() {
         "typescript" => prompt_select("Framework", &["none", "react", "next"])?,
         "python" => prompt_select("Framework", &["none", "fastapi", "cli"])?,
+        "go" => prompt_select("Framework", &["none", "http", "cli"])?,
         "anchor" => "anchor".to_string(),
         _ => "none".to_string(),
     };
@@ -480,21 +533,27 @@ fn cmd_new(name: &str) -> miette::Result<()> {
     Ok(())
 }
 
-fn cmd_run(task: &str, filter: Option<&str>) -> miette::Result<()> {
+fn cmd_run(task: &str, filter: Option<&str>, parallel: bool) -> miette::Result<()> {
     let (graph, root) = discover_graph()?;
     let config = load_config(&root);
 
+    let mode = if parallel {
+        "parallel".dimmed().to_string()
+    } else {
+        "sequential".dimmed().to_string()
+    };
     eprintln!(
-        "{} {} {}",
+        "{} {} {} {}",
         "kdo".cyan().bold(),
         "run".bold(),
-        task.yellow().bold()
+        task.yellow().bold(),
+        mode
     );
 
-    run::run_task(&graph, &config, task, filter)
+    run::run_task(&graph, &config, task, filter, parallel)
 }
 
-fn cmd_exec(command: &str, filter: Option<&str>) -> miette::Result<()> {
+fn cmd_exec(command: &str, filter: Option<&str>, parallel: bool) -> miette::Result<()> {
     let (graph, _root) = discover_graph()?;
 
     eprintln!(
@@ -504,7 +563,7 @@ fn cmd_exec(command: &str, filter: Option<&str>) -> miette::Result<()> {
         command.dimmed()
     );
 
-    run::exec_command(&graph, command, filter)
+    run::exec_command(&graph, command, filter, parallel)
 }
 
 fn cmd_list(format: OutputFormat) -> miette::Result<()> {
@@ -833,6 +892,7 @@ fn scaffold_project(
         "typescript" => scaffold_typescript(dir, &src_dir, name, framework)?,
         "python" => scaffold_python(dir, &src_dir, name, framework)?,
         "anchor" => scaffold_anchor(dir, &src_dir, name)?,
+        "go" => scaffold_go(dir, name, framework)?,
         _ => scaffold_rust(dir, &src_dir, name, project_type)?,
     }
 
@@ -985,6 +1045,34 @@ dev = [
     };
 
     std::fs::write(dir.join(format!("{snake_name}.py")), py_content).into_diagnostic()?;
+    Ok(())
+}
+
+fn scaffold_go(dir: &Path, name: &str, framework: &str) -> miette::Result<()> {
+    let module_path = format!("github.com/user/{name}");
+
+    let go_mod = format!("module {module_path}\n\ngo 1.21\n");
+    std::fs::write(dir.join("go.mod"), go_mod).into_diagnostic()?;
+
+    let main_content = match framework {
+        "http" => format!(
+            "package main\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\nfunc main() {{\n\thttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {{\n\t\tfmt.Fprintf(w, \"hello from {name}\")\n\t}})\n\thttp.ListenAndServe(\":8080\", nil)\n}}\n"
+        ),
+        "cli" => format!(
+            "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {{\n\tif len(os.Args) > 1 {{\n\t\tfmt.Println(\"hello,\", os.Args[1])\n\t\treturn\n\t}}\n\tfmt.Println(\"hello from {name}\")\n}}\n"
+        ),
+        _ => format!(
+            "package main\n\nimport \"fmt\"\n\n// Hello returns a greeting from {name}.\nfunc Hello() string {{\n\treturn \"hello from {name}\"\n}}\n\nfunc main() {{\n\tfmt.Println(Hello())\n}}\n"
+        ),
+    };
+
+    std::fs::write(dir.join("main.go"), main_content).into_diagnostic()?;
+
+    // Simple test file
+    let test_content =
+        "package main\n\nimport \"testing\"\n\nfunc TestHello(t *testing.T) {\n\tif got := Hello(); got == \"\" {\n\t\tt.Error(\"Hello() returned empty string\")\n\t}\n}\n";
+    std::fs::write(dir.join("main_test.go"), test_content).into_diagnostic()?;
+
     Ok(())
 }
 

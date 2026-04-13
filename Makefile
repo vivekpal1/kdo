@@ -1,12 +1,15 @@
-.PHONY: all build release install uninstall test lint fmt check doc clean dev ci help
+.PHONY: all build release install uninstall test lint fmt fmt-fix check doc clean dev ci fixture completions docker help
 
 # Variables
 CARGO       := cargo
 BINARY      := kdo
-PREFIX      := /usr/local
-BINDIR      := $(PREFIX)/bin
 RELEASE_DIR := target/release
 FIXTURE     := fixtures/sample-monorepo
+
+# Install prefix: KDO_PREFIX env var, or ~/.local by default.
+# Override: KDO_PREFIX=/usr/local make install  (requires sudo on macOS)
+PREFIX  ?= $(HOME)/.local
+BINDIR  := $(PREFIX)/bin
 
 all: build ## Build in debug mode (default)
 
@@ -16,13 +19,16 @@ build: ## Build in debug mode
 release: ## Build optimized release binary
 	$(CARGO) build --release
 
-install: release ## Install kdo to $(PREFIX)/bin
-	install -d $(BINDIR)
-	install -m 755 $(RELEASE_DIR)/$(BINARY) $(BINDIR)/$(BINARY)
+install: release ## Install kdo to BINDIR (auto-detects ~/.local/bin or /usr/local/bin)
+	@mkdir -p $(BINDIR)
+	@install -m 755 $(RELEASE_DIR)/$(BINARY) $(BINDIR)/$(BINARY)
 	@echo "Installed $(BINARY) to $(BINDIR)/$(BINARY)"
+	@echo ""
+	@echo "Make sure $(BINDIR) is on your PATH:"
+	@echo "  export PATH=\"$(BINDIR):\$$PATH\""
 
-uninstall: ## Remove kdo from $(PREFIX)/bin
-	rm -f $(BINDIR)/$(BINARY)
+uninstall: ## Remove kdo from BINDIR
+	@rm -f $(BINDIR)/$(BINARY)
 	@echo "Removed $(BINARY) from $(BINDIR)/$(BINARY)"
 
 test: ## Run all tests
@@ -43,36 +49,39 @@ check: ## Run cargo check
 doc: ## Build documentation
 	$(CARGO) doc --no-deps --all-features
 
-clean: ## Clean build artifacts
+clean: ## Clean build artifacts (preserves fixture source files)
 	$(CARGO) clean
-	rm -rf $(FIXTURE)/.kdo $(FIXTURE)/kdo.toml $(FIXTURE)/.kdoignore $(FIXTURE)/.gitignore
+	@# Only remove generated/cached files from the fixture — not committed source files.
+	@rm -rf $(FIXTURE)/.kdo $(FIXTURE)/.kdoignore
 
-dev: build ## Build and run kdo init on fixture
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) init
+dev: build ## Build debug binary and run kdo init on fixture
+	@rm -rf $(FIXTURE)/.kdo $(FIXTURE)/.kdoignore
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) init
 
 ci: fmt lint test doc ## Run full CI pipeline locally
 	@echo ""
 	@echo "All checks passed."
 
 fixture: release ## Run full demo on sample-monorepo
-	@rm -rf $(FIXTURE)/.kdo $(FIXTURE)/kdo.toml $(FIXTURE)/.kdoignore $(FIXTURE)/.gitignore
+	@# Reset only cache/generated files — keep committed kdo.toml
+	@rm -rf $(FIXTURE)/.kdo $(FIXTURE)/.kdoignore
 	@echo "=== init ==="
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) init
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) init
 	@echo ""
 	@echo "=== list ==="
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) list
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) list
 	@echo ""
 	@echo "=== graph ==="
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) graph
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) graph
 	@echo ""
 	@echo "=== context vault-program ==="
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) context vault-program --budget 2048
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) context vault-program --budget 2048
 	@echo ""
 	@echo "=== run build ==="
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) run build
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) run build
 	@echo ""
 	@echo "=== doctor ==="
-	cd $(FIXTURE) && ../../$(RELEASE_DIR)/$(BINARY) doctor
+	cd $(FIXTURE) && $(CURDIR)/$(RELEASE_DIR)/$(BINARY) doctor
 
 completions: release ## Generate shell completions to ./completions/
 	@mkdir -p completions

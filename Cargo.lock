@@ -457,6 +457,7 @@ dependencies = [
  "kdo-mcp",
  "miette",
  "owo-colors",
+ "rayon",
  "serde",
  "serde_json",
  "tabled",

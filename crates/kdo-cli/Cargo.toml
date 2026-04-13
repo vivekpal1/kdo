@@ -34,4 +34,5 @@ anyhow = { workspace = true }
 tabled = { workspace = true }
 owo-colors = { workspace = true }
 indicatif = { workspace = true }
+rayon = { workspace = true }
 ignore = { workspace = true }

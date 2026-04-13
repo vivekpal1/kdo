@@ -5,11 +5,13 @@
 
 mod anchor;
 mod cargo;
+mod go;
 mod node;
 mod python;
 
 pub use anchor::AnchorParser;
 pub use cargo::CargoParser;
+pub use go::GoParser;
 pub use node::NodeParser;
 pub use python::PythonParser;
 
@@ -46,6 +48,7 @@ pub fn parse_manifest(
         Box::new(CargoParser),
         Box::new(NodeParser),
         Box::new(PythonParser),
+        Box::new(GoParser),
     ];
 
     for parser in &parsers {
@@ -64,5 +67,6 @@ pub fn manifest_filenames() -> &'static [&'static str] {
         "Cargo.toml",
         "package.json",
         "pyproject.toml",
+        "go.mod",
     ]
 }
