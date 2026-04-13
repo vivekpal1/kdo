@@ -1,0 +1,14 @@
+target/
+.git/
+.github/
+fixtures/
+benches/
+*.md
+!README.md
+LICENSE
+.gitignore
+.gitattributes
+.editorconfig
+rustfmt.toml
+clippy.toml
+deny.toml
