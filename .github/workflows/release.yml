@@ -94,3 +94,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: kdo-${{ github.ref_name }}-${{ matrix.target }}.*
+          body_path: CHANGELOG.md
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          generate_release_notes: true
