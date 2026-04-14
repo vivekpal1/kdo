@@ -6,4 +6,4 @@
 mod discover;
 mod hash;
 
-pub use discover::WorkspaceGraph;
+pub use discover::{parse_pnpm_workspace, parse_pnpm_workspace_str, WorkspaceGraph};

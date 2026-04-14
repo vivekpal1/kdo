@@ -377,18 +377,32 @@ impl WorkspaceGraph {
     }
 }
 
-/// Apply `workspace.projects` and `workspace.exclude` glob filters from `kdo.toml`.
-/// If no `kdo.toml` is present or no globs are set, returns the input unchanged.
+/// Apply glob filters from both `kdo.toml` (workspace.projects/exclude) and
+/// `pnpm-workspace.yaml` (packages list). If neither file is present, the
+/// input is returned unchanged.
 fn apply_workspace_globs(root: &Path, paths: Vec<PathBuf>) -> Vec<PathBuf> {
     use globset::{Glob, GlobSetBuilder};
 
+    let mut include_patterns: Vec<String> = Vec::new();
+    let mut exclude_patterns: Vec<String> = Vec::new();
+
     let kdo_toml = root.join("kdo.toml");
-    if !kdo_toml.exists() {
+    if kdo_toml.exists() {
+        if let Ok(config) = kdo_core::WorkspaceConfig::load(&kdo_toml) {
+            include_patterns.extend(config.workspace.project_globs);
+            exclude_patterns.extend(config.workspace.exclude);
+        }
+    }
+
+    // pnpm-workspace.yaml — honor `packages:` entries, treating `!` prefix as exclude.
+    if let Some((inc, exc)) = parse_pnpm_workspace(&root.join("pnpm-workspace.yaml")) {
+        include_patterns.extend(inc);
+        exclude_patterns.extend(exc);
+    }
+
+    if include_patterns.is_empty() && exclude_patterns.is_empty() {
         return paths;
     }
-    let Ok(config) = kdo_core::WorkspaceConfig::load(&kdo_toml) else {
-        return paths;
-    };
 
     let build_set = |patterns: &[String]| -> Option<globset::GlobSet> {
         if patterns.is_empty() {
@@ -403,8 +417,8 @@ fn apply_workspace_globs(root: &Path, paths: Vec<PathBuf>) -> Vec<PathBuf> {
         builder.build().ok()
     };
 
-    let include = build_set(&config.workspace.project_globs);
-    let exclude = build_set(&config.workspace.exclude);
+    let include = build_set(&include_patterns);
+    let exclude = build_set(&exclude_patterns);
 
     paths
         .into_iter()
@@ -425,6 +439,76 @@ fn apply_workspace_globs(root: &Path, paths: Vec<PathBuf>) -> Vec<PathBuf> {
             true
         })
         .collect()
+}
+
+/// Parse a `pnpm-workspace.yaml` file and return `(includes, excludes)`.
+/// Patterns prefixed with `!` are excludes. We avoid pulling in a YAML crate by
+/// relying on pnpm's simple documented schema:
+///
+/// ```yaml
+/// packages:
+///   - "apps/*"
+///   - "!**/test/**"
+/// ```
+pub fn parse_pnpm_workspace(path: &Path) -> Option<(Vec<String>, Vec<String>)> {
+    let content = std::fs::read_to_string(path).ok()?;
+    parse_pnpm_workspace_str(&content)
+}
+
+/// Version of [`parse_pnpm_workspace`] that takes the file contents directly.
+/// Exposed for tests.
+pub fn parse_pnpm_workspace_str(content: &str) -> Option<(Vec<String>, Vec<String>)> {
+    let mut in_packages = false;
+    let mut includes = Vec::new();
+    let mut excludes = Vec::new();
+
+    for raw in content.lines() {
+        // Strip comments
+        let line = match raw.find('#') {
+            Some(i) => &raw[..i],
+            None => raw,
+        };
+
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if !trimmed.starts_with([' ', '\t', '-']) {
+            // Top-level key: enter or leave the `packages:` block
+            in_packages = trimmed.trim_end_matches(':').trim() == "packages";
+            continue;
+        }
+
+        if !in_packages {
+            continue;
+        }
+
+        // Accept forms:   `- "apps/*"`   `- 'apps/*'`   `- apps/*`
+        let item = trimmed.trim();
+        let Some(rest) = item.strip_prefix('-') else {
+            continue;
+        };
+        let pattern = rest
+            .trim()
+            .trim_matches(|c: char| c == '"' || c == '\'')
+            .trim();
+        if pattern.is_empty() {
+            continue;
+        }
+
+        if let Some(pat) = pattern.strip_prefix('!') {
+            excludes.push(pat.to_string());
+        } else {
+            includes.push(pattern.to_string());
+        }
+    }
+
+    if includes.is_empty() && excludes.is_empty() {
+        None
+    } else {
+        Some((includes, excludes))
+    }
 }
 
 /// Filter manifests to prefer more specific ones (Anchor.toml > Cargo.toml in same dir).

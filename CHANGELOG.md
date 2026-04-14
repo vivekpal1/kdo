@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-04-14
+
+### Added
+
+- `kdo upgrade [--version X] [--dry-run]` — self-update the binary from the latest
+  GitHub release (or a pinned version) with atomic replace + rollback on failure.
+- `kdo run --dry-run` — print the resolved task pipeline without executing.
+- `kdo similar <project>` — find structurally similar projects by language + shared
+  dependencies (Jaccard score + same-language bonus).
+- `kdo source <symbol>` — look up a symbol's definition across all workspace source
+  files, respecting `.gitignore` / `.kdoignore`.
+- pnpm workspace support: `pnpm-workspace.yaml` `packages:` globs (including `!exclude`
+  entries) are honored during project discovery, merged with `kdo.toml` filters.
+- MCP resource endpoints — context files under `.kdo/context/` are now exposed via
+  `resources/list` and `resources/read` as `kdo://context/<project>` URIs. MCP clients
+  can attach them directly without calling `kdo_get_context`.
+
+### Changed
+
+- `resources` capability is now advertised in the MCP `initialize` response.
+
+### Tests
+
+- Property tests for the `pnpm-workspace.yaml` parser (proptest).
+
 ## [0.1.0-alpha.2] - 2026-04-14
 
 ### Added
@@ -63,6 +88,7 @@ First public alpha. Expect breakage. API surface is not stable.
 - Colored CLI output (owo-colors) and progress bars (indicatif)
 - Integration test suite against `fixtures/sample-monorepo`
 
-[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/vivekpal1/kdo/releases/tag/v0.1.0-alpha.1

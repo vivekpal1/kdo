@@ -12,8 +12,8 @@ categories.workspace = true
 readme = "../../README.md"
 
 [dependencies]
-kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.2" }
-kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.2" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.3" }
+kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.3" }
 tree-sitter = { workspace = true }
 tree-sitter-rust = { workspace = true }
 tree-sitter-typescript = { workspace = true }

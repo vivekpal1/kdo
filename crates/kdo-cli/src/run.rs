@@ -26,13 +26,15 @@ struct Step {
 
 /// Run a named task. Resolves aliases, expands `depends_on`, and executes the
 /// resulting plan. `extra_args` is appended to every resolved command (for
-/// `kdo run build -- --release` pass-through).
+/// `kdo run build -- --release` pass-through). When `dry_run` is true, prints
+/// the plan without executing.
 pub fn run_task(
     graph: &WorkspaceGraph,
     config: &WorkspaceConfig,
     task_name: &str,
     filter: Option<&str>,
     parallel: bool,
+    dry_run: bool,
     extra_args: &[String],
 ) -> miette::Result<()> {
     let resolved_name = config.resolve_alias(task_name);
@@ -64,6 +66,11 @@ pub fn run_task(
         miette::bail!("task '{task_name}' not found in any project or kdo.toml");
     }
 
+    if dry_run {
+        print_plan(&plan);
+        return Ok(());
+    }
+
     let failures = if parallel {
         run_parallel(&plan)?
     } else {
@@ -75,6 +82,32 @@ pub fn run_task(
     }
 
     Ok(())
+}
+
+/// Print the resolved plan without executing — useful for validating pipelines.
+fn print_plan(plan: &[Step]) {
+    eprintln!(
+        "{} {} steps",
+        "plan:".cyan().bold(),
+        plan.len().to_string().yellow().bold()
+    );
+    for (i, step) in plan.iter().enumerate() {
+        let num = format!("{:>2}.", i + 1);
+        eprintln!(
+            "  {} {} {} {}",
+            num.dimmed(),
+            step.project.name.cyan().bold(),
+            format!(":{}", step.task_name).yellow(),
+            step.command.dimmed()
+        );
+        if !step.env.is_empty() {
+            let envs: Vec<String> = step.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            eprintln!("     {} {}", "env".dimmed(), envs.join(" ").dimmed());
+        }
+        if step.persistent {
+            eprintln!("     {}", "persistent".yellow());
+        }
+    }
 }
 
 /// Recursively plan a task for a project, expanding `depends_on` first.

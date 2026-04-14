@@ -7,6 +7,7 @@ use kdo_graph::WorkspaceGraph;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error};
 
@@ -54,13 +55,15 @@ struct ToolDef {
 struct McpServer {
     graph: Arc<WorkspaceGraph>,
     ctx_gen: Arc<ContextGenerator>,
+    root: PathBuf,
 }
 
 impl McpServer {
-    fn new(graph: WorkspaceGraph, ctx_gen: ContextGenerator) -> Self {
+    fn new(graph: WorkspaceGraph, ctx_gen: ContextGenerator, root: PathBuf) -> Self {
         Self {
             graph: Arc::new(graph),
             ctx_gen: Arc::new(ctx_gen),
+            root,
         }
     }
 
@@ -70,6 +73,8 @@ impl McpServer {
             "initialize" => self.handle_initialize(),
             "tools/list" => self.handle_tools_list(),
             "tools/call" => self.handle_tools_call(params),
+            "resources/list" => self.handle_resources_list(),
+            "resources/read" => self.handle_resources_read(params),
             "ping" => Ok(serde_json::json!({})),
             _ => Err(jsonrpc_error(
                 -32601,
@@ -95,13 +100,72 @@ impl McpServer {
         Ok(serde_json::json!({
             "protocolVersion": "2024-11-05",
             "capabilities": {
-                "tools": {}
+                "tools": {},
+                "resources": { "listChanged": false, "subscribe": false }
             },
             "serverInfo": {
                 "name": "kdo",
                 "version": env!("CARGO_PKG_VERSION")
             },
-            "instructions": "Context-native workspace manager. Use kdo_list_projects first to orient, then kdo_get_context for a specific project within a token budget. Use kdo_read_symbol only when you need a specific function body."
+            "instructions": "Context-native workspace manager. Use kdo_list_projects first to orient, then kdo_get_context for a specific project within a token budget. Use kdo_read_symbol only when you need a specific function body. Pre-generated context files are also available as resources (kdo://context/<project>)."
+        }))
+    }
+
+    /// List all available resources — one per cached context file under `.kdo/context/`.
+    fn handle_resources_list(&self) -> Result<Value, Value> {
+        let context_dir = self.root.join(".kdo").join("context");
+        let mut resources = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&context_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                    continue;
+                }
+                let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                    continue;
+                };
+                resources.push(serde_json::json!({
+                    "uri": format!("kdo://context/{stem}"),
+                    "name": format!("{stem} context"),
+                    "description": format!("Pre-generated context bundle for project `{stem}`."),
+                    "mimeType": "text/markdown",
+                }));
+            }
+        }
+        Ok(serde_json::json!({ "resources": resources }))
+    }
+
+    /// Read a single resource by URI. Only `kdo://context/<project>` is supported.
+    fn handle_resources_read(&self, params: &Value) -> Result<Value, Value> {
+        let uri = params
+            .get("uri")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpc_error(-32602, "missing uri"))?;
+
+        let project = uri
+            .strip_prefix("kdo://context/")
+            .ok_or_else(|| jsonrpc_error(-32602, &format!("unsupported uri: {uri}")))?;
+
+        // Defense-in-depth: reject path traversal / absolute paths.
+        if project.is_empty() || project.contains('/') || project.contains("..") {
+            return Err(jsonrpc_error(-32602, "invalid project name"));
+        }
+
+        let path = self
+            .root
+            .join(".kdo")
+            .join("context")
+            .join(format!("{project}.md"));
+        let content = std::fs::read_to_string(&path).map_err(|e| {
+            jsonrpc_error(-32000, &format!("failed to read {}: {e}", path.display()))
+        })?;
+
+        Ok(serde_json::json!({
+            "contents": [{
+                "uri": uri,
+                "mimeType": "text/markdown",
+                "text": content,
+            }]
         }))
     }
 
@@ -421,8 +485,12 @@ struct JsonRpcRequest {
 }
 
 /// Run the MCP server on stdio. Reads JSON-RPC messages line-by-line.
-pub fn run_stdio(graph: WorkspaceGraph, ctx_gen: ContextGenerator) -> anyhow::Result<()> {
-    let server = McpServer::new(graph, ctx_gen);
+pub fn run_stdio(
+    graph: WorkspaceGraph,
+    ctx_gen: ContextGenerator,
+    root: PathBuf,
+) -> anyhow::Result<()> {
+    let server = McpServer::new(graph, ctx_gen, root);
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut stdout = stdout.lock();

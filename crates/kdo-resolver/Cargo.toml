@@ -12,7 +12,7 @@ categories.workspace = true
 readme = "../../README.md"
 
 [dependencies]
-kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.2" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.3" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

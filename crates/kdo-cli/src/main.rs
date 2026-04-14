@@ -46,6 +46,10 @@ enum Commands {
         #[arg(long)]
         parallel: bool,
 
+        /// Print the resolved pipeline without executing.
+        #[arg(long)]
+        dry_run: bool,
+
         /// Extra args appended to the resolved command (use after `--`).
         #[arg(last = true)]
         args: Vec<String>,
@@ -119,6 +123,41 @@ enum Commands {
         #[arg(long, default_value = "stdio")]
         transport: String,
     },
+
+    /// Find projects structurally similar to the given one.
+    Similar {
+        /// Project name.
+        project: String,
+
+        /// Number of results to return.
+        #[arg(long, default_value = "5")]
+        limit: usize,
+
+        /// Output format.
+        #[arg(long, default_value = "table")]
+        format: OutputFormat,
+    },
+
+    /// Look up a symbol's definition across the workspace.
+    Source {
+        /// Symbol name (function, struct, class, type).
+        symbol: String,
+
+        /// Only search this project.
+        #[arg(long)]
+        filter: Option<String>,
+    },
+
+    /// Upgrade kdo to the latest release (or a specific version).
+    Upgrade {
+        /// Install a specific version (e.g. `0.1.0-alpha.3`). Default: latest release.
+        #[arg(long)]
+        version: Option<String>,
+
+        /// Show what would happen without changing the binary.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -170,8 +209,9 @@ fn main() -> miette::Result<()> {
             task,
             filter,
             parallel,
+            dry_run,
             args,
-        } => cmd_run(&task, filter.as_deref(), parallel, &args)?,
+        } => cmd_run(&task, filter.as_deref(), parallel, dry_run, &args)?,
         Commands::Exec {
             command,
             filter,
@@ -188,6 +228,13 @@ fn main() -> miette::Result<()> {
         Commands::Doctor => cmd_doctor()?,
         Commands::Completions { shell } => cmd_completions(shell)?,
         Commands::Serve { transport } => cmd_serve(&transport)?,
+        Commands::Similar {
+            project,
+            limit,
+            format,
+        } => cmd_similar(&project, limit, format)?,
+        Commands::Source { symbol, filter } => cmd_source(&symbol, filter.as_deref())?,
+        Commands::Upgrade { version, dry_run } => cmd_upgrade(version.as_deref(), dry_run)?,
     }
 
     Ok(())
@@ -663,12 +710,15 @@ fn cmd_run(
     task: &str,
     filter: Option<&str>,
     parallel: bool,
+    dry_run: bool,
     extra_args: &[String],
 ) -> miette::Result<()> {
     let (graph, root) = discover_graph()?;
     let config = load_config(&root);
 
-    let mode = if parallel {
+    let mode = if dry_run {
+        "dry-run".magenta().to_string()
+    } else if parallel {
         "parallel".dimmed().to_string()
     } else {
         "sequential".dimmed().to_string()
@@ -681,7 +731,7 @@ fn cmd_run(
         mode
     );
 
-    run::run_task(&graph, &config, task, filter, parallel, extra_args)
+    run::run_task(&graph, &config, task, filter, parallel, dry_run, extra_args)
 }
 
 fn cmd_exec(command: &str, filter: Option<&str>, parallel: bool) -> miette::Result<()> {
@@ -962,11 +1012,371 @@ fn cmd_serve(transport: &str) -> miette::Result<()> {
             let root = std::env::current_dir().into_diagnostic()?;
             let graph = WorkspaceGraph::discover(&root).map_err(|e| miette::miette!("{e}"))?;
             let ctx_gen = ContextGenerator::new();
-            kdo_mcp::run_stdio(graph, ctx_gen).map_err(|e| miette::miette!("{e}"))?;
+            kdo_mcp::run_stdio(graph, ctx_gen, root).map_err(|e| miette::miette!("{e}"))?;
         }
         other => {
             miette::bail!("unsupported transport: {other}. Only 'stdio' is supported.");
         }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// similar / source / upgrade
+// ---------------------------------------------------------------------------
+
+#[derive(Tabled)]
+struct SimilarRow {
+    #[tabled(rename = "Project")]
+    name: String,
+    #[tabled(rename = "Language")]
+    language: String,
+    #[tabled(rename = "Score")]
+    score: String,
+    #[tabled(rename = "Shared deps")]
+    shared: String,
+}
+
+/// Find projects structurally similar to `project_name`.
+/// Similarity = (same language bonus) + Jaccard(dependency sets).
+fn cmd_similar(project_name: &str, limit: usize, format: OutputFormat) -> miette::Result<()> {
+    let (graph, _root) = discover_graph()?;
+    let target = graph
+        .get_project(project_name)
+        .map_err(|e| miette::miette!("{e}"))?;
+    let target_deps = graph
+        .dependency_closure(project_name)
+        .map_err(|e| miette::miette!("{e}"))?;
+    let target_dep_names: std::collections::HashSet<String> =
+        target_deps.iter().map(|p| p.name.clone()).collect();
+
+    let mut scored: Vec<(f32, &kdo_core::Project, Vec<String>)> = Vec::new();
+    for candidate in graph.projects() {
+        if candidate.name == target.name {
+            continue;
+        }
+        let cand_deps = graph
+            .dependency_closure(&candidate.name)
+            .map_err(|e| miette::miette!("{e}"))?;
+        let cand_dep_names: std::collections::HashSet<String> =
+            cand_deps.iter().map(|p| p.name.clone()).collect();
+
+        let shared: Vec<String> = target_dep_names
+            .intersection(&cand_dep_names)
+            .cloned()
+            .collect();
+        let union = target_dep_names.union(&cand_dep_names).count().max(1);
+        let jaccard = shared.len() as f32 / union as f32;
+        let lang_bonus = if candidate.language == target.language {
+            0.5
+        } else {
+            0.0
+        };
+        let score = jaccard + lang_bonus;
+        if score > 0.0 {
+            scored.push((score, candidate, shared));
+        }
+    }
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(limit);
+
+    match format {
+        OutputFormat::Json => {
+            let json: Vec<serde_json::Value> = scored
+                .iter()
+                .map(|(score, p, shared)| {
+                    serde_json::json!({
+                        "name": p.name,
+                        "language": p.language.to_string(),
+                        "score": score,
+                        "shared_deps": shared,
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&json).into_diagnostic()?);
+        }
+        OutputFormat::Table => {
+            if scored.is_empty() {
+                eprintln!("{}", "No similar projects found.".yellow());
+                return Ok(());
+            }
+            let rows: Vec<SimilarRow> = scored
+                .iter()
+                .map(|(score, p, shared)| SimilarRow {
+                    name: p.name.clone(),
+                    language: p.language.to_string(),
+                    score: format!("{score:.2}"),
+                    shared: if shared.is_empty() {
+                        "—".into()
+                    } else {
+                        shared.join(", ")
+                    },
+                })
+                .collect();
+            eprintln!(
+                "{} projects similar to {}",
+                "kdo".cyan().bold(),
+                project_name.yellow().bold()
+            );
+            println!("{}", Table::new(rows));
+        }
+    }
+    Ok(())
+}
+
+/// Look up a symbol's definition across the workspace by grepping source files.
+fn cmd_source(symbol: &str, filter: Option<&str>) -> miette::Result<()> {
+    let (graph, _root) = discover_graph()?;
+    let projects: Vec<&kdo_core::Project> = graph
+        .projects()
+        .into_iter()
+        .filter(|p| match filter {
+            Some(f) => p.name == f || p.name.contains(f),
+            None => true,
+        })
+        .collect();
+
+    if projects.is_empty() {
+        miette::bail!("no projects matched filter");
+    }
+
+    let patterns = build_symbol_patterns(symbol);
+    let mut hits: Vec<SourceHit> = Vec::new();
+
+    for project in &projects {
+        for abs in walk_source_files(&project.path) {
+            let Ok(content) = std::fs::read_to_string(&abs) else {
+                continue;
+            };
+            let rel = abs.strip_prefix(&project.path).unwrap_or(&abs);
+            for (line_no, line) in content.lines().enumerate() {
+                if patterns.iter().any(|p| line.contains(p)) {
+                    hits.push(SourceHit {
+                        project: project.name.clone(),
+                        file: rel.display().to_string(),
+                        line: line_no + 1,
+                        snippet: line.trim().to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    if hits.is_empty() {
+        eprintln!(
+            "{} No definition of {} found.",
+            "kdo".cyan().bold(),
+            symbol.yellow().bold()
+        );
+        return Ok(());
+    }
+
+    eprintln!(
+        "{} {} hits for {}",
+        "kdo".cyan().bold(),
+        hits.len().to_string().green().bold(),
+        symbol.yellow().bold()
+    );
+    for hit in &hits {
+        println!(
+            "  {}:{} {}",
+            format!("{}/{}", hit.project, hit.file).cyan(),
+            hit.line.to_string().yellow(),
+            hit.snippet.dimmed()
+        );
+    }
+    Ok(())
+}
+
+struct SourceHit {
+    project: String,
+    file: String,
+    line: usize,
+    snippet: String,
+}
+
+/// Walk a project directory for source files we care about, honoring `.gitignore`
+/// / `.kdoignore` via the `ignore` crate.
+fn walk_source_files(project_path: &Path) -> Vec<std::path::PathBuf> {
+    const SOURCE_EXTS: &[&str] = &["rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go"];
+    let mut builder = ignore::WalkBuilder::new(project_path);
+    ignore::WalkBuilder::hidden(&mut builder, true);
+    ignore::WalkBuilder::git_ignore(&mut builder, true);
+    builder.add_custom_ignore_filename(".kdoignore");
+    builder.filter_entry(|e| {
+        let name = e.file_name().to_string_lossy();
+        !matches!(
+            name.as_ref(),
+            "node_modules" | "target" | ".git" | ".kdo" | "dist" | "build" | "__pycache__"
+        )
+    });
+
+    builder
+        .build()
+        .filter_map(|e| e.ok())
+        .filter(|e: &ignore::DirEntry| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+        .map(|e| e.into_path())
+        .filter(|p: &std::path::PathBuf| {
+            p.extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| SOURCE_EXTS.contains(&ext))
+        })
+        .collect()
+}
+
+/// Build language-agnostic definition-ish patterns for a symbol.
+fn build_symbol_patterns(symbol: &str) -> Vec<String> {
+    vec![
+        format!("fn {symbol}"),
+        format!("fn {symbol}("),
+        format!("pub fn {symbol}"),
+        format!("struct {symbol}"),
+        format!("enum {symbol}"),
+        format!("trait {symbol}"),
+        format!("type {symbol}"),
+        format!("class {symbol}"),
+        format!("interface {symbol}"),
+        format!("def {symbol}("),
+        format!("function {symbol}"),
+        format!("export function {symbol}"),
+        format!("export class {symbol}"),
+        format!("export const {symbol}"),
+        format!("export type {symbol}"),
+        format!("const {symbol} ="),
+        format!("func {symbol}("),
+    ]
+}
+
+/// Upgrade kdo in place by downloading the latest release binary.
+fn cmd_upgrade(version: Option<&str>, dry_run: bool) -> miette::Result<()> {
+    let current_exe = std::env::current_exe().into_diagnostic()?;
+    let platform = detect_platform()?;
+    let target_version = match version {
+        Some(v) => format!("v{}", v.trim_start_matches('v')),
+        None => fetch_latest_tag()?,
+    };
+
+    let current = env!("CARGO_PKG_VERSION");
+    let stripped = target_version.trim_start_matches('v');
+    eprintln!(
+        "{} {} → {}",
+        "kdo upgrade".cyan().bold(),
+        current.dimmed(),
+        stripped.yellow().bold()
+    );
+
+    if stripped == current {
+        eprintln!("  {} already at {current}.", "ok".green());
+        return Ok(());
+    }
+
+    let archive = format!("kdo-{target_version}-{platform}.tar.gz");
+    let url =
+        format!("https://github.com/vivekpal1/kdo/releases/download/{target_version}/{archive}");
+    eprintln!("  {} {url}", "url".dimmed());
+    eprintln!("  {} {}", "target".dimmed(), current_exe.display());
+
+    if dry_run {
+        eprintln!("  {} no changes made.", "dry-run".magenta());
+        return Ok(());
+    }
+
+    let tmp_dir = std::env::temp_dir().join(format!("kdo-upgrade-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp_dir).into_diagnostic()?;
+    let archive_path = tmp_dir.join(&archive);
+
+    eprintln!("  {} downloading…", "»".bold());
+    download_to_file(&url, &archive_path)?;
+
+    eprintln!("  {} extracting…", "»".bold());
+    let status = std::process::Command::new("tar")
+        .arg("xzf")
+        .arg(&archive_path)
+        .arg("-C")
+        .arg(&tmp_dir)
+        .status()
+        .into_diagnostic()?;
+    if !status.success() {
+        miette::bail!("failed to extract archive");
+    }
+
+    let new_binary = tmp_dir.join("kdo");
+    if !new_binary.exists() {
+        miette::bail!("extracted archive did not contain a `kdo` binary");
+    }
+
+    // Atomic replace: write to temp file next to current, then rename.
+    let backup = current_exe.with_extension("old");
+    std::fs::rename(&current_exe, &backup).into_diagnostic()?;
+    if let Err(e) = std::fs::copy(&new_binary, &current_exe) {
+        // Roll back on failure.
+        let _ = std::fs::rename(&backup, &current_exe);
+        return Err(miette::miette!("failed to install new binary: {e}"));
+    }
+    let _ = std::fs::remove_file(&backup);
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    eprintln!(
+        "  {} installed kdo {}.",
+        "ok".green(),
+        stripped.yellow().bold()
+    );
+    Ok(())
+}
+
+/// Match the install-script naming convention.
+fn detect_platform() -> miette::Result<&'static str> {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    match (os, arch) {
+        ("linux", "x86_64") => Ok("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64") => Ok("aarch64-unknown-linux-gnu"),
+        ("macos", "x86_64") => Ok("x86_64-apple-darwin"),
+        ("macos", "aarch64") => Ok("aarch64-apple-darwin"),
+        _ => miette::bail!(
+            "no prebuilt binary for {os}/{arch}. Install from source with `cargo install kdo`."
+        ),
+    }
+}
+
+/// Fetch the most recent release tag (including prereleases) from the GitHub API.
+///
+/// `/releases/latest` skips prereleases, which is wrong for an alpha project.
+/// We hit `/releases` (list, newest first) and take the first `tag_name`.
+fn fetch_latest_tag() -> miette::Result<String> {
+    let url = "https://api.github.com/repos/vivekpal1/kdo/releases?per_page=1";
+    let curl = std::process::Command::new("curl")
+        .args(["-fsSL", "-H", "User-Agent: kdo-upgrade", url])
+        .output()
+        .into_diagnostic()?;
+    if !curl.status.success() {
+        miette::bail!("failed to query GitHub releases API — does the repo have any releases yet?");
+    }
+    let body = String::from_utf8_lossy(&curl.stdout);
+    let needle = "\"tag_name\":";
+    let start = body.find(needle).ok_or_else(|| {
+        miette::miette!("no releases found — install a specific version with --version")
+    })?;
+    let after = &body[start + needle.len()..];
+    let q1 = after
+        .find('"')
+        .ok_or_else(|| miette::miette!("malformed release response"))?;
+    let tail = &after[q1 + 1..];
+    let q2 = tail
+        .find('"')
+        .ok_or_else(|| miette::miette!("malformed release response"))?;
+    Ok(tail[..q2].to_string())
+}
+
+/// Download via curl (dependency-light; curl ships on macOS/Linux by default).
+fn download_to_file(url: &str, dest: &Path) -> miette::Result<()> {
+    let status = std::process::Command::new("curl")
+        .args(["-fsSL", url, "-o"])
+        .arg(dest)
+        .status()
+        .into_diagnostic()?;
+    if !status.success() {
+        miette::bail!("download failed for {url}");
     }
     Ok(())
 }
