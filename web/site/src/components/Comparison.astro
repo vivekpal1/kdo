@@ -1,0 +1,72 @@
+---
+type Cell = boolean | "partial";
+type Tool = "kdo" | "turbo" | "nx" | "bun" | "pnpm";
+type Row = { feature: string } & Record<Tool, Cell>;
+
+const rows: Row[] = [
+  { feature: "Polyglot graph", kdo: true, turbo: false, nx: "partial", bun: false, pnpm: false },
+  { feature: "MCP server built-in", kdo: true, turbo: false, nx: false, bun: false, pnpm: false },
+  { feature: "Token-budgeted context", kdo: true, turbo: false, nx: false, bun: false, pnpm: false },
+  { feature: "Task pipelines (^task / //task)", kdo: true, turbo: "partial", nx: true, bun: false, pnpm: false },
+  { feature: "Per-project task overrides", kdo: true, turbo: true, nx: true, bun: false, pnpm: false },
+  { feature: "Single static binary", kdo: true, turbo: false, nx: false, bun: true, pnpm: false },
+  { feature: "Package install / lockfile", kdo: false, turbo: false, nx: false, bun: true, pnpm: true },
+];
+
+const cols: readonly Tool[] = ["kdo", "turbo", "nx", "bun", "pnpm"] as const;
+
+const cell = (v: Cell) => {
+  if (v === true) return { glyph: "●", cls: "text-tide" };
+  if (v === "partial") return { glyph: "◐", cls: "text-ink-2" };
+  return { glyph: "○", cls: "text-ink-3/60" };
+};
+---
+
+<section class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+  <div class="mx-auto max-w-2xl text-center">
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">honest comparison</p>
+    <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
+      Different from turbo. Different from bun.
+    </h2>
+    <p class="mt-5 text-lg text-ink-3">
+      kdo isn't a package manager and isn't trying to be. Use it alongside whatever installs your deps.
+    </p>
+  </div>
+
+  <div class="glass mx-auto mt-12 max-w-4xl overflow-hidden rounded-2xl">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-fog/60 text-xs uppercase tracking-wider text-ink-3">
+        <tr>
+          <th class="px-5 py-3 font-medium">Feature</th>
+          {cols.map((c) => (
+            <th class={`px-3 py-3 text-center font-medium ${c === "kdo" ? "text-tide" : ""}`}>
+              {c}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((row, i) => (
+            <tr class={i % 2 === 0 ? "" : "bg-canvas-2/50"}>
+              <td class="px-5 py-3.5 text-ink-2">{row.feature}</td>
+              {cols.map((c) => {
+                const v = row[c];
+                const { glyph, cls } = cell(v);
+                return (
+                  <td class={`px-3 py-3.5 text-center font-mono ${cls}`}>
+                    <span aria-label={v === true ? "yes" : v === "partial" ? "partial" : "no"}>{glyph}</span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <p class="mx-auto mt-6 max-w-2xl text-center text-xs text-ink-3">
+    ● full · ◐ partial · ○ not supported · alpha software, comparisons reflect kdo 0.1.0-alpha.3
+  </p>
+</section>

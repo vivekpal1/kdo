@@ -1,0 +1,49 @@
+---
+const features = [
+  {
+    title: "Polyglot graph",
+    body:
+      "Rust · TypeScript · Python · Go · Anchor — one dependency graph. Discovery is parallel, deterministic, and respects every .gitignore in the tree.",
+    accent: "language-agnostic",
+  },
+  {
+    title: "MCP context",
+    body:
+      "Token-budgeted context bundles served over JSON-RPC. Claude Code, Cursor, and any MCP client get structured signatures instead of file walks.",
+    accent: "agent-native",
+  },
+  {
+    title: "Pipeline runner",
+    body:
+      "Tasks with depends_on, env merging, aliases, per-project overrides, and pass-through args. Topological order across languages, parallel within stages.",
+    accent: "task graph",
+  },
+];
+---
+
+<section class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+  <div class="mx-auto max-w-2xl text-center">
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">why kdo</p>
+    <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
+      One binary for the whole monorepo.
+    </h2>
+    <p class="mt-5 text-lg text-ink-3">
+      Turbo and Nx don't speak Rust. Bun and pnpm don't speak Python. kdo speaks all of them — and serves
+      the result to your AI agent in tokens it can afford.
+    </p>
+  </div>
+
+  <div class="mt-16 grid gap-4 sm:grid-cols-3">
+    {
+      features.map((f) => (
+        <article class="glass relative overflow-hidden rounded-2xl p-6 transition-colors duration-150 ease-out hover:bg-white/70">
+          <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-tide">
+            {f.accent}
+          </span>
+          <h3 class="mt-3 text-xl font-medium tracking-tight text-ink">{f.title}</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-3">{f.body}</p>
+        </article>
+      ))
+    }
+  </div>
+</section>

@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+
+/* ─────────────────── kdo brand tokens ─────────────────── */
+@theme {
+  /* Cool off-white — the canvas */
+  --color-canvas: oklch(98.4% 0.003 240);
+  --color-canvas-2: oklch(96.5% 0.005 240);
+  --color-fog: oklch(92% 0.006 240);
+  --color-line: oklch(88% 0.006 240);
+
+  /* Ink */
+  --color-ink: oklch(18% 0.01 240);
+  --color-ink-2: oklch(35% 0.012 240);
+  --color-ink-3: oklch(55% 0.012 240);
+
+  /* Accent: deep liquid teal — used sparingly */
+  --color-tide: oklch(56% 0.105 200);
+  --color-tide-soft: oklch(86% 0.06 200);
+
+  /* Footer */
+  --color-deep: oklch(14% 0.02 250);
+  --color-deep-2: oklch(20% 0.025 250);
+
+  /* Type */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Easing */
+  --ease-out-glass: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─────────────────── base ─────────────────── */
+html {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: var(--color-tide-soft);
+  color: var(--color-ink);
+}
+
+/* ─────────────────── glass primitive ─────────────────── */
+.glass {
+  background: color-mix(in oklch, white 55%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid color-mix(in oklch, white 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.7),
+    inset 0 -1px 0 0 rgb(255 255 255 / 0.15),
+    0 1px 2px 0 rgb(20 30 50 / 0.04),
+    0 8px 24px -8px rgb(20 30 50 / 0.08);
+}
+
+.glass-dark {
+  background: color-mix(in oklch, black 35%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in oklch, white 14%, transparent);
+}
+
+/* ─────────────────── grid + crosshair canvas ─────────────────── */
+.grid-canvas {
+  background-image:
+    linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: -1px -1px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 35%, black 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 35%, black 30%, transparent 75%);
+  opacity: 0.45;
+}
+
+.crosshair::before,
+.crosshair::after {
+  content: "";
+  position: absolute;
+  background: var(--color-line);
+}
+.crosshair::before { width: 10px; height: 1px; transform: translate(-50%, -50%); left: 0; top: 0; }
+.crosshair::after  { width: 1px; height: 10px; transform: translate(-50%, -50%); left: 0; top: 0; }
+
+/* ─────────────────── liquid glass marble ─────────────────── */
+.marble {
+  position: relative;
+  border-radius: 9999px;
+  background:
+    radial-gradient(ellipse 60% 50% at 35% 28%, rgb(255 255 255 / 0.92) 0%, rgb(255 255 255 / 0) 55%),
+    radial-gradient(ellipse 80% 60% at 70% 80%, color-mix(in oklch, var(--color-tide) 30%, transparent) 0%, transparent 60%),
+    linear-gradient(135deg, rgb(255 255 255 / 0.5) 0%, rgb(220 230 240 / 0.25) 50%, rgb(180 200 220 / 0.35) 100%);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow:
+    inset 0 2px 4px rgb(255 255 255 / 0.9),
+    inset 0 -8px 16px -4px rgb(40 60 100 / 0.18),
+    inset 0 0 0 1px rgb(255 255 255 / 0.4),
+    0 12px 32px -8px rgb(20 30 50 / 0.18),
+    0 30px 60px -20px rgb(20 30 50 / 0.22);
+}
+.marble::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 35% 25%, rgb(255 255 255 / 0.7) 0%, transparent 25%);
+  pointer-events: none;
+}
+
+/* ─────────────────── motion ─────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .float-slow {
+    animation: float 9s var(--ease-out-glass) infinite;
+  }
+  .float-slower {
+    animation: float 13s var(--ease-out-glass) infinite;
+  }
+  .fade-up {
+    animation: fade-up 600ms var(--ease-out-glass) both;
+  }
+  .fade-up-d1 { animation-delay: 80ms; }
+  .fade-up-d2 { animation-delay: 160ms; }
+  .fade-up-d3 { animation-delay: 240ms; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) }
+  50% { transform: translateY(-10px) }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px) }
+  to   { opacity: 1; transform: translateY(0) }
+}

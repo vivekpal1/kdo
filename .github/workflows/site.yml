@@ -1,0 +1,44 @@
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+# Allow this workflow to deploy to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one in-flight deploy at a time. New pushes cancel old runs.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: withastro/action@v3
+        with:
+          path: web/site
+          node-version: 20
+          package-manager: npm@latest
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

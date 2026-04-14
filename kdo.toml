@@ -1,0 +1,59 @@
+# kdo workspace configuration
+# https://github.com/vivekpal1/kdo
+#
+# Projects: kdo, kdo-core, kdo-resolver, kdo-graph, kdo-context, kdo-mcp (+ web/* once added)
+
+[workspace]
+name = "kdo"
+projects = ["crates/*", "web/*"]
+exclude  = ["fixtures/**", "target/**"]
+
+# Short aliases: `kdo run b` → `kdo run build`.
+[aliases]
+b = "build"
+t = "test"
+l = "lint"
+
+# Workspace-wide environment (merged into every task invocation).
+# Loaded before `[env]`; keys here win over env_files.
+# [env]
+# RUST_BACKTRACE = "1"
+# env_files = [".env", ".env.local"]
+
+# ─────────────────────────── TASKS ───────────────────────────
+# Tasks can be declared two ways:
+#
+#   1. Bare command:
+#        build = "cargo build"
+#
+#   2. Full spec with pipeline semantics:
+#        [tasks.build]
+#        command     = "cargo build"
+#        depends_on  = ["^build"]          # "^task" = run `task` in every
+#                                          #          upstream dep project first
+#                                          # "task"  = same project, earlier step
+#                                          # "//task"= workspace-wide task first
+#        inputs      = ["src/**", "Cargo.toml"]
+#        outputs     = ["target/debug/"]
+#        cache       = true                # reserved for future cache backend
+#        persistent  = false               # long-running (dev server) — don't block
+#        env         = { RUST_LOG = "info" }
+
+[tasks]
+build = "cargo build"
+test  = "cargo test"
+lint  = "cargo clippy --all-targets -- -D warnings"
+fmt   = "cargo fmt --all"
+dev   = "cargo run"
+
+# Example pipeline (uncomment to use):
+# [tasks.ci]
+# depends_on = ["lint", "test", "build"]
+
+# ────────────────────── PER-PROJECT OVERRIDES ─────────────────
+# Override tasks or env for a specific project:
+# [projects.my-service]
+# env = { DATABASE_URL = "postgres://localhost/myservice_dev" }
+#
+# [projects.my-service.tasks]
+# build = "cargo build --release --features prod"

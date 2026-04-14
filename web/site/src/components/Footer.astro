@@ -1,0 +1,123 @@
+---
+// Wonder-style dark footer. The brand moment is a single oversized "KDOW" wordmark
+// that bleeds off the bottom — repo name as a sign-off.
+---
+
+<footer class="relative mt-32 overflow-hidden bg-deep text-canvas">
+  <!-- Top transition: thin separator + the marbles row that bleeds out the bottom -->
+  <div class="relative mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 sm:pt-20">
+    <div class="grid gap-12 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <span aria-hidden="true" class="relative inline-flex h-7 w-7 items-center justify-center">
+            <span class="marble absolute inset-0"></span>
+          </span>
+          <span class="text-lg font-medium tracking-tight">kdo</span>
+        </div>
+        <p class="mt-5 max-w-md text-sm leading-relaxed text-canvas/60">
+          Workspace manager for the agent era. MIT licensed. Built in Rust. Every project you discover
+          becomes a marble at the bottom of this page.
+        </p>
+      </div>
+
+      <nav aria-label="Project">
+        <h3 class="font-mono text-[11px] uppercase tracking-[0.18em] text-canvas/40">Project</h3>
+        <ul class="mt-4 space-y-2.5 text-sm">
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo">GitHub</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://crates.io/crates/kdo">crates.io</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/blob/main/TODO.md">Roadmap</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-label="Docs">
+        <h3 class="font-mono text-[11px] uppercase tracking-[0.18em] text-canvas/40">Docs</h3>
+        <ul class="mt-4 space-y-2.5 text-sm">
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo#install">Install</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/tree/main/skills/kdo">Agent skill</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/tree/main/fixtures/sample-monorepo">Sample monorepo</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-label="Community">
+        <h3 class="font-mono text-[11px] uppercase tracking-[0.18em] text-canvas/40">Community</h3>
+        <ul class="mt-4 space-y-2.5 text-sm">
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/issues">Issues</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/discussions">Discussions</a></li>
+        </ul>
+      </nav>
+    </div>
+
+    <!-- Meta strip -->
+    <div class="mt-16 flex flex-col items-center justify-between gap-4 border-t border-canvas/10 pt-6 text-xs text-canvas/40 sm:flex-row">
+      <span>© {new Date().getFullYear()} kdo · MIT</span>
+      <span class="font-mono">v0.1.0-alpha.3</span>
+    </div>
+  </div>
+
+  <!-- KDOW: oversized brand sign-off, bleeds off the bottom edge. -->
+  <div
+    class="kdow-mark relative mt-4 flex items-end justify-center overflow-hidden px-4 pt-6 sm:px-6"
+    aria-hidden="true"
+  >
+    <span class="kdow-text select-none whitespace-nowrap">KDOW</span>
+  </div>
+</footer>
+
+<style>
+  .kdow-mark {
+    /* clip the bottom third so the wordmark dives off the page */
+    height: clamp(11rem, 20vw, 22rem);
+  }
+
+  .kdow-text {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    letter-spacing: -0.06em;
+    line-height: 0.82;
+    font-size: clamp(7rem, 28vw, 28rem);
+    /* translate down so the bottom of the letters bleeds past the page edge */
+    transform: translateY(18%);
+
+    /* layered fill: bright top → fade to base, with a hairline highlight on the inside */
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, white 92%, transparent) 0%,
+      color-mix(in oklch, white 22%, transparent) 55%,
+      color-mix(in oklch, white 6%, transparent) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+
+    /* soft outer glow + faint inner reflection */
+    filter: drop-shadow(0 14px 40px rgb(255 255 255 / 0.06));
+  }
+
+  /* Subtle moving sheen — tide-tinted, very low intensity, only when motion is allowed */
+  @media (prefers-reduced-motion: no-preference) {
+    .kdow-text {
+      background:
+        linear-gradient(
+          110deg,
+          color-mix(in oklch, white 88%, transparent) 0%,
+          color-mix(in oklch, white 22%, transparent) 35%,
+          color-mix(in oklch, var(--color-tide-soft) 60%, transparent) 50%,
+          color-mix(in oklch, white 22%, transparent) 65%,
+          color-mix(in oklch, white 8%, transparent) 100%
+        );
+      background-size: 220% 100%;
+      background-position: 0% 50%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      animation: kdow-sheen 12s var(--ease-out-glass) infinite;
+    }
+  }
+
+  @keyframes kdow-sheen {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+</style>

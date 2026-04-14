@@ -1,0 +1,36 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "kdo — workspace manager for the agent era",
+  description = "Cuts AI agent token consumption 5–10× on polyglot monorepos. Polyglot graph, MCP context, pipeline runner — one binary.",
+} = Astro.props;
+
+// `BASE_URL` is `/` on root deploys, `/kdo` for the project subpath. Strip any
+// trailing slash so we can append paths uniformly with `${base}/path`.
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#f7f8fa" />
+  </head>
+  <body class="bg-canvas text-ink antialiased">
+    <slot />
+  </body>
+</html>

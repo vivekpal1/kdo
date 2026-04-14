@@ -1,0 +1,45 @@
+---
+// Floating glass header — Wonder-app style.
+// Sits ~24px from the top, pill-shaped, with the wordmark on the left
+// and a single CTA on the right.
+const base = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+---
+
+<header class="fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-6">
+  <nav
+    class="glass flex w-full max-w-6xl items-center justify-between rounded-full px-3 py-2 sm:px-4 sm:py-2.5"
+    aria-label="Primary"
+  >
+    <a
+      href={base}
+      class="group flex items-center gap-2 rounded-full px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide"
+    >
+      <span aria-hidden="true" class="relative inline-flex h-6 w-6 items-center justify-center">
+        <span class="marble absolute inset-0"></span>
+      </span>
+      <span class="font-medium tracking-tight text-ink">kdo</span>
+      <span class="hidden text-xs text-ink-3 sm:inline">/ alpha</span>
+    </a>
+
+    <div class="flex items-center gap-1 sm:gap-2">
+      <a
+        href="https://github.com/vivekpal1/kdo"
+        class="hidden rounded-full px-3 py-1.5 text-sm text-ink-2 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:inline-block"
+      >
+        GitHub
+      </a>
+      <a
+        href="https://crates.io/crates/kdo"
+        class="hidden rounded-full px-3 py-1.5 text-sm text-ink-2 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:inline-block"
+      >
+        crates.io
+      </a>
+      <a
+        href="#install"
+        class="rounded-full bg-ink px-3.5 py-1.5 text-sm font-medium text-canvas transition-transform duration-100 ease-out hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:px-4"
+      >
+        Install
+      </a>
+    </div>
+  </nav>
+</header>

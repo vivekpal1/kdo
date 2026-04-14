@@ -1,0 +1,101 @@
+---
+import CodeBlock from "./CodeBlock.astro";
+
+const agents = [
+  {
+    label: "claude code",
+    title: "Claude Code",
+    description:
+      "Register kdo as a global MCP server. After this, every project gets the kdo_list_projects, kdo_get_context, kdo_search_code, and kdo_run_task tools — no per-repo setup.",
+    docsHref: "https://docs.claude.com/en/docs/claude-code/mcp",
+    docsLabel: "Claude Code MCP docs",
+    snippets: [
+      {
+        caption: "register the server (one-time)",
+        code: "claude mcp add --scope user kdo -- kdo serve --transport stdio",
+        lang: "bash",
+      },
+      {
+        caption: "verify",
+        code: "claude mcp list",
+        lang: "bash",
+      },
+    ],
+  },
+  {
+    label: "opencode",
+    title: "OpenCode",
+    description:
+      "Add kdo to your OpenCode config (workspace `opencode.json` or `~/.config/opencode/opencode.json`). OpenCode auto-discovers it on next launch.",
+    docsHref: "https://opencode.ai/docs/mcp-servers/",
+    docsLabel: "OpenCode MCP docs",
+    snippets: [
+      {
+        caption: "opencode.json",
+        code: `{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "kdo": {
+      "type": "local",
+      "command": ["kdo", "serve", "--transport", "stdio"],
+      "enabled": true
+    }
+  }
+}`,
+        lang: "json",
+      },
+    ],
+  },
+];
+---
+
+<section id="agents" class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+  <div class="mx-auto max-w-2xl text-center">
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">use with your agent</p>
+    <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
+      Plug it into your AI.
+    </h2>
+    <p class="mt-5 text-lg text-ink-3">
+      kdo speaks MCP over stdio. Any agent that supports MCP can use it — orient on a workspace,
+      pull token-budgeted context, search code, run tasks. Below are the two most common.
+    </p>
+  </div>
+
+  <div class="mx-auto mt-12 grid max-w-4xl gap-4 lg:grid-cols-2">
+    {
+      agents.map((agent) => (
+        <div class="glass flex flex-col rounded-2xl p-5 sm:p-6">
+          <div class="flex items-baseline justify-between gap-4">
+            <span class="font-mono text-xs uppercase tracking-[0.18em] text-tide">{agent.label}</span>
+            <a
+              href={agent.docsHref}
+              class="text-[11px] text-ink-3 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide"
+              rel="noopener"
+            >
+              docs ↗
+            </a>
+          </div>
+
+          <h3 class="mt-2 text-xl font-medium tracking-tight text-ink">{agent.title}</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-3">{agent.description}</p>
+
+          <div class="mt-5 flex flex-1 flex-col gap-3">
+            {agent.snippets.map((s) => (
+              <div>
+                <span class="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em] text-ink-3">
+                  {s.caption}
+                </span>
+                <CodeBlock code={s.code} lang={s.lang} block />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))
+    }
+  </div>
+
+  <p class="mx-auto mt-8 max-w-2xl text-center text-sm text-ink-3">
+    Other MCP-capable clients (Cursor, Zed, Cline, Continue) follow the same pattern — point them at
+    <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo serve --transport stdio</code>.
+  </p>
+</section>

@@ -1,0 +1,79 @@
+---
+// Two-column: kdo.toml on the left, prose on the right.
+// The toml is real (sample-monorepo style), so future-readers can copy it.
+---
+
+<section class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+  <div class="grid items-start gap-12 lg:grid-cols-[1.1fr_1fr]">
+    <div class="glass overflow-hidden rounded-2xl p-1">
+      <div class="flex items-center justify-between border-b border-fog/60 px-4 pt-3 pb-2">
+        <span class="font-mono text-[11px] tracking-tight text-ink-3">kdo.toml</span>
+        <span class="font-mono text-[11px] tracking-tight text-ink-3">workspace · committed</span>
+      </div>
+      <pre class="overflow-x-auto px-5 py-4 font-mono text-[12.5px] leading-6 text-ink-2 sm:text-[13px]"><code><span class="text-ink-3">[workspace]</span>
+<span class="text-ink">name</span> = <span class="text-tide">"my-monorepo"</span>
+<span class="text-ink">projects</span> = [<span class="text-tide">"apps/*"</span>, <span class="text-tide">"crates/*"</span>]
+
+<span class="text-ink-3">[aliases]</span>
+<span class="text-ink">b</span> = <span class="text-tide">"build"</span>
+<span class="text-ink">t</span> = <span class="text-tide">"test"</span>
+
+<span class="text-ink-3">[env]</span>
+<span class="text-ink">RUST_BACKTRACE</span> = <span class="text-tide">"1"</span>
+
+<span class="text-ink-3">[tasks.build]</span>
+<span class="text-ink">command</span>    = <span class="text-tide">"cargo build"</span>
+<span class="text-ink">depends_on</span> = [<span class="text-tide">"^build"</span>]
+<span class="text-ink">inputs</span>     = [<span class="text-tide">"src/**"</span>, <span class="text-tide">"Cargo.toml"</span>]
+<span class="text-ink">outputs</span>    = [<span class="text-tide">"target/debug/"</span>]
+
+<span class="text-ink-3">[tasks.dev]</span>
+<span class="text-ink">command</span>    = <span class="text-tide">"cargo watch -x run"</span>
+<span class="text-ink">persistent</span> = <span class="text-tide">true</span>
+
+<span class="text-ink-3">[projects.vault-program.tasks]</span>
+<span class="text-ink">build</span> = <span class="text-tide">"anchor build"</span></code></pre>
+    </div>
+
+    <div>
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">config that grows with you</p>
+      <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
+        Tasks with shape.
+      </h2>
+      <p class="mt-5 text-lg text-ink-3">
+        Bare strings work. Pipelines with <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">depends_on</code>,
+        env merging, aliases, and per-project overrides also work. Same file, gradient of complexity.
+      </p>
+      <ul class="mt-8 space-y-4 text-ink-2">
+        <li class="flex items-start gap-3">
+          <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
+          <span>
+            <code class="font-mono text-sm text-ink">^task</code> runs the task in every upstream dep first —
+            topological build orchestration in one character.
+          </span>
+        </li>
+        <li class="flex items-start gap-3">
+          <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
+          <span>
+            <code class="font-mono text-sm text-ink">//task</code> fans the task out across the whole workspace —
+            CI in one line.
+          </span>
+        </li>
+        <li class="flex items-start gap-3">
+          <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
+          <span>
+            <code class="font-mono text-sm text-ink">--dry-run</code> prints the resolved plan with env, persistent
+            markers, and the exact command kdo would run.
+          </span>
+        </li>
+        <li class="flex items-start gap-3">
+          <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
+          <span>
+            <code class="font-mono text-sm text-ink">[projects.&lt;name&gt;]</code> overrides any task or env per
+            project — Anchor, Bun, and Cargo coexisting peacefully.
+          </span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,58 @@
+---
+// Reusable code block with a copy button. Pass `code` (string) and `lang` (display only).
+// The wiring script lives once at the bottom of the page (Install.astro) and finds
+// every `.copy-btn` on document load — which means CodeBlock and Install share it.
+
+interface Props {
+  code: string;
+  lang?: string;
+  /** Stretch to fill column instead of capping at content width. */
+  block?: boolean;
+}
+
+const { code, lang, block = false } = Astro.props;
+---
+
+<div class={`flex items-stretch gap-2 ${block ? "w-full" : ""}`}>
+  <div class="relative flex-1 overflow-hidden rounded-lg bg-canvas-2/70">
+    {lang && (
+      <span class="pointer-events-none absolute top-2 right-3 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-3/70">
+        {lang}
+      </span>
+    )}
+    <pre class="overflow-x-auto px-3.5 py-3 font-mono text-[13px] leading-5 text-ink"><code>{code}</code></pre>
+  </div>
+
+  <button
+    type="button"
+    class="copy-btn group inline-flex w-11 shrink-0 items-center justify-center self-stretch rounded-lg bg-canvas-2/70 text-ink-2 transition-colors duration-100 ease-out hover:bg-canvas-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide"
+    data-copy={code}
+    aria-label="Copy command"
+  >
+    <svg
+      class="copy-icon h-4 w-4"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="5" y="5" width="9" height="9" rx="1.5" />
+      <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" />
+    </svg>
+    <svg
+      class="check-icon hidden h-4 w-4 text-tide"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.75"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 8.5l3.5 3.5L13 4.5" />
+    </svg>
+  </button>
+</div>
