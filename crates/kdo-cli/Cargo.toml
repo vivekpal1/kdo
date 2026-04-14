@@ -16,10 +16,10 @@ name = "kdo"
 path = "src/main.rs"
 
 [dependencies]
-kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.1" }
-kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.1" }
-kdo-context = { path = "../kdo-context", version = "=0.1.0-alpha.1" }
-kdo-mcp = { path = "../kdo-mcp", version = "=0.1.0-alpha.1" }
+kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.2" }
+kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.2" }
+kdo-context = { path = "../kdo-context", version = "=0.1.0-alpha.2" }
+kdo-mcp = { path = "../kdo-mcp", version = "=0.1.0-alpha.2" }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 serde = { workspace = true }

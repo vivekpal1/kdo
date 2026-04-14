@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-04-14
+
 ### Added
 
 - Rich `kdo.toml` schema: tasks can be declared as bare commands or full specs with
@@ -22,7 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass-through args after `--` (e.g. `kdo run build -- --release`).
 - Persistent task flag for long-running processes like `dev` servers.
 - `kdo init` now generates a richly-commented `kdo.toml` with language-aware defaults.
-- Prefix format changed from `[project]` to `[project:task]` for clearer pipeline output.
+
+### Changed
+
+- Task output prefix changed from `[project]` to `[project:task]` for clearer pipeline logs.
+- Release workflow is now idempotent — already-published crates are skipped.
+- Removed redundant `rustsec/audit-check` job; `cargo-deny` handles RustSec advisories.
+
+### Fixed
+
+- `deny.toml` migrated to cargo-deny v2 schema (`version = 2`).
 
 ## [0.1.0-alpha.1] - 2026-04-13
 
@@ -52,5 +63,6 @@ First public alpha. Expect breakage. API surface is not stable.
 - Colored CLI output (owo-colors) and progress bars (indicatif)
 - Integration test suite against `fixtures/sample-monorepo`
 
-[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/vivekpal1/kdo/releases/tag/v0.1.0-alpha.1
