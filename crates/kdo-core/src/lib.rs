@@ -129,13 +129,34 @@ pub enum KdoError {
 }
 
 /// Workspace configuration parsed from `kdo.toml`.
+///
+/// Supports a rich task pipeline model with dependencies, env, aliases, and per-project
+/// overrides. Simple string tasks (`build = "cargo build"`) continue to work.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkspaceConfig {
     /// Workspace metadata.
     pub workspace: WorkspaceMeta,
-    /// Named tasks that can be run via `kdo run <name>`.
+
+    /// Named tasks. Values can be a bare command string or a rich `[tasks.<name>]` table.
     #[serde(default)]
-    pub tasks: std::collections::BTreeMap<String, String>,
+    pub tasks: std::collections::BTreeMap<String, TaskSpec>,
+
+    /// Workspace-wide environment variables, applied to every task invocation.
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+
+    /// Paths to `.env`-style files loaded before task execution.
+    /// Keys already in [`Self::env`] take precedence.
+    #[serde(default)]
+    pub env_files: Vec<String>,
+
+    /// Short aliases for tasks, e.g. `b = "build"` so `kdo run b` resolves to `build`.
+    #[serde(default)]
+    pub aliases: std::collections::BTreeMap<String, String>,
+
+    /// Per-project overrides keyed by project name.
+    #[serde(default)]
+    pub projects: std::collections::BTreeMap<String, ProjectConfig>,
 }
 
 /// Workspace metadata section of `kdo.toml`.
@@ -144,6 +165,111 @@ pub struct WorkspaceMeta {
     /// Workspace name.
     #[serde(default)]
     pub name: String,
+
+    /// Explicit glob patterns for project discovery. When set, only these paths
+    /// are scanned for manifests. Empty = scan everything (default behavior).
+    #[serde(default, rename = "projects")]
+    pub project_globs: Vec<String>,
+
+    /// Paths to exclude from project discovery.
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+/// A single task definition. Can be declared either as a bare command string
+/// (`build = "cargo build"`) or as a full spec (`[tasks.build] command = "..."`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TaskSpec {
+    /// Bare command form: `build = "cargo build"`.
+    Command(String),
+    /// Full spec form with dependencies, inputs, env, and caching hints.
+    Full(TaskDef),
+}
+
+/// Full task definition with pipeline semantics.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TaskDef {
+    /// Shell command to execute. Optional when the task is purely composite (only `depends_on`).
+    #[serde(default)]
+    pub command: Option<String>,
+
+    /// Task dependencies.
+    ///
+    /// - `"build"` — run this project's `build` task first (same project).
+    /// - `"^build"` — run `build` in every upstream dependency project first (topological).
+    /// - `"//lint"` — run the workspace-level `lint` task first.
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+
+    /// Input glob patterns. Used for cache key computation (future: content-addressable cache).
+    #[serde(default)]
+    pub inputs: Vec<String>,
+
+    /// Output glob patterns. Files/dirs produced by the task.
+    #[serde(default)]
+    pub outputs: Vec<String>,
+
+    /// Whether this task's output is cacheable. Default: true.
+    #[serde(default = "default_true")]
+    pub cache: bool,
+
+    /// Long-running / persistent task (e.g. dev server). Won't block downstream tasks.
+    #[serde(default)]
+    pub persistent: bool,
+
+    /// Task-specific environment variables (merged on top of workspace env).
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Per-project overrides declared under `[projects.<name>]` in `kdo.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProjectConfig {
+    /// Task overrides for this project.
+    #[serde(default)]
+    pub tasks: std::collections::BTreeMap<String, TaskSpec>,
+
+    /// Project-specific env (merged on top of workspace env, below task env).
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+}
+
+impl TaskSpec {
+    /// Borrow the command if this task has one.
+    pub fn command(&self) -> Option<&str> {
+        match self {
+            Self::Command(c) => Some(c.as_str()),
+            Self::Full(def) => def.command.as_deref(),
+        }
+    }
+
+    /// Task dependencies (possibly empty).
+    pub fn depends_on(&self) -> &[String] {
+        match self {
+            Self::Command(_) => &[],
+            Self::Full(def) => &def.depends_on,
+        }
+    }
+
+    /// Borrow task-level env vars.
+    pub fn env(&self) -> &std::collections::BTreeMap<String, String> {
+        static EMPTY: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
+            std::sync::OnceLock::new();
+        match self {
+            Self::Command(_) => EMPTY.get_or_init(std::collections::BTreeMap::new),
+            Self::Full(def) => &def.env,
+        }
+    }
+
+    /// Whether the task should not block downstream execution.
+    pub fn persistent(&self) -> bool {
+        matches!(self, Self::Full(def) if def.persistent)
+    }
 }
 
 impl WorkspaceConfig {
@@ -164,6 +290,11 @@ impl WorkspaceConfig {
         })?;
         std::fs::write(path, content)?;
         Ok(())
+    }
+
+    /// Resolve an alias to its real task name. Returns the input unchanged if not aliased.
+    pub fn resolve_alias<'a>(&'a self, name: &'a str) -> &'a str {
+        self.aliases.get(name).map(String::as_str).unwrap_or(name)
     }
 }
 
