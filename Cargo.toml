@@ -36,7 +36,7 @@ tree-sitter-python = "0.21"
 anyhow = "1"
 indexmap = { version = "2", features = ["serde"] }
 walkdir = "2"
-tabled = "0.15"
+tabled = "0.20"
 owo-colors = "4"
 indicatif = "0.17"
 clap_complete = "4.5"
