@@ -22,17 +22,27 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish -p kdo-core --no-verify
-          sleep 30
-          cargo publish -p kdo-resolver --no-verify
-          sleep 30
-          cargo publish -p kdo-graph --no-verify
-          sleep 30
-          cargo publish -p kdo-context --no-verify
-          sleep 30
-          cargo publish -p kdo-mcp --no-verify
-          sleep 30
-          cargo publish -p kdo --no-verify
+          publish() {
+            local crate="$1"
+            local output
+            if output=$(cargo publish -p "$crate" --no-verify 2>&1); then
+              echo "$output"
+              echo "Published $crate"
+              sleep 30
+            elif echo "$output" | grep -q "already exists on crates.io"; then
+              echo "$output"
+              echo "$crate already published, skipping"
+            else
+              echo "$output"
+              exit 1
+            fi
+          }
+          publish kdo-core
+          publish kdo-resolver
+          publish kdo-graph
+          publish kdo-context
+          publish kdo-mcp
+          publish kdo
 
   build-binaries:
     name: Build (${{ matrix.target }})
