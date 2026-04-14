@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README now documents the `--version` requirement for pre-release `cargo install kdo`.
+
+### Fixed
+
+- Project-discovery globs now honor `/` as a literal separator so `packages/*` matches
+  only direct children (matching pnpm/turbo semantics). Previously `packages/*`
+  incorrectly matched nested paths like `packages/a/b/c`.
+
+### Tests
+
+- Integration regression tests for the glob-depth fix and exclude semantics.
+
 ## [0.1.0-alpha.3] - 2026-04-14
 
 ### Added

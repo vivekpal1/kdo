@@ -404,13 +404,20 @@ fn apply_workspace_globs(root: &Path, paths: Vec<PathBuf>) -> Vec<PathBuf> {
         return paths;
     }
 
+    // Build a GlobSet that treats `/` as a literal separator — matching pnpm/turbo
+    // semantics. Without this, `packages/*` would match `packages/a/b/c`, which is
+    // surprising and incorrect.
     let build_set = |patterns: &[String]| -> Option<globset::GlobSet> {
+        use globset::GlobBuilder;
         if patterns.is_empty() {
             return None;
         }
         let mut builder = GlobSetBuilder::new();
         for p in patterns {
-            if let Ok(g) = Glob::new(p) {
+            if let Ok(g) = GlobBuilder::new(p).literal_separator(true).build() {
+                builder.add(g);
+            } else if let Ok(g) = Glob::new(p) {
+                // Fall back to default builder if the strict form fails to parse.
                 builder.add(g);
             }
         }

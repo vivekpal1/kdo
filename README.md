@@ -6,15 +6,44 @@ kdo scans your workspace, builds a dependency graph, and serves structured conte
 
 ## Install
 
+kdo is pre-`0.1.0` — all current releases are alphas. You have to opt in explicitly.
+
+**Prebuilt binary (fastest — no Rust toolchain needed):**
+
 ```bash
-cargo install --git https://github.com/vivekpal1/kdo
+curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash -s -- --from-release
 ```
 
-Or with Docker:
+**From crates.io (requires the version flag for pre-releases):**
+
+```bash
+cargo install kdo --version "0.1.0-alpha.3"
+```
+
+> `cargo install kdo` without `--version` fails with "could not find `kdo` in registry"
+> because Cargo skips pre-releases by default. Once `0.1.0` stable ships, the plain
+> `cargo install kdo` command will just work.
+
+**From source (requires Rust toolchain):**
+
+```bash
+cargo install --git https://github.com/vivekpal1/kdo
+# or
+curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash
+```
+
+**Docker:**
 
 ```bash
 docker pull ghcr.io/vivekpal1/kdo:latest
 docker run -v $(pwd):/workspace ghcr.io/vivekpal1/kdo list
+```
+
+**Upgrade later:**
+
+```bash
+kdo upgrade               # pull the latest release binary
+kdo upgrade --dry-run     # show what would change
 ```
 
 ## Quick start

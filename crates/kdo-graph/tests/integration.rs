@@ -13,6 +13,21 @@ fn fixture_root() -> PathBuf {
         .expect("fixtures/sample-monorepo must exist")
 }
 
+/// Helper for glob-filter tests: build a tempdir tree with fake package.json files.
+fn make_scratch_workspace(files: &[(&str, &str)]) -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    for (rel, pkg_name) in files {
+        let dir = tmp.path().join(rel);
+        std::fs::create_dir_all(&dir).expect("create dir");
+        std::fs::write(
+            dir.join("package.json"),
+            format!(r#"{{"name":"{pkg_name}","version":"1.0.0"}}"#),
+        )
+        .expect("write package.json");
+    }
+    tmp
+}
+
 #[test]
 fn discovers_expected_project_count() {
     let root = fixture_root();
@@ -112,4 +127,54 @@ fn dot_output_is_valid() {
     let dot = graph.to_dot();
     assert!(dot.starts_with("digraph workspace {"));
     assert!(dot.ends_with("}\n"));
+}
+
+#[test]
+fn pnpm_workspace_packages_star_is_single_depth() {
+    // Regression: globset's default `*` crosses `/`. We set `literal_separator(true)`
+    // so `packages/*` matches exactly one level — matching pnpm/turbo semantics.
+    let tmp = make_scratch_workspace(&[
+        ("apps/web", "web"),
+        ("apps/api", "api"),
+        ("packages/ui", "ui"),
+        ("packages/nested/deep", "deep"),
+    ]);
+    std::fs::write(
+        tmp.path().join("pnpm-workspace.yaml"),
+        "packages:\n  - \"apps/*\"\n  - \"packages/*\"\n",
+    )
+    .unwrap();
+
+    let graph = WorkspaceGraph::discover(tmp.path()).expect("discovery must succeed");
+    let mut names: Vec<String> = graph.projects().iter().map(|p| p.name.clone()).collect();
+    names.sort();
+    assert_eq!(
+        names,
+        vec!["api", "ui", "web"],
+        "nested package `deep` must NOT be included by single-depth `packages/*`"
+    );
+}
+
+#[test]
+fn pnpm_workspace_exclude_filters_test_dirs() {
+    let tmp = make_scratch_workspace(&[
+        ("apps/web", "web"),
+        ("apps/web/__tests__/fixture", "fixture"),
+    ]);
+    std::fs::write(
+        tmp.path().join("pnpm-workspace.yaml"),
+        "packages:\n  - \"apps/**\"\n  - \"!**/__tests__/**\"\n",
+    )
+    .unwrap();
+
+    let graph = WorkspaceGraph::discover(tmp.path()).expect("discovery must succeed");
+    let names: Vec<String> = graph.projects().iter().map(|p| p.name.clone()).collect();
+    assert!(
+        names.contains(&"web".to_string()),
+        "expected `web` to be included; got {names:?}"
+    );
+    assert!(
+        !names.contains(&"fixture".to_string()),
+        "expected test fixture to be excluded; got {names:?}"
+    );
 }

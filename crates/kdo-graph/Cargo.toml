@@ -30,3 +30,4 @@ indexmap = { workspace = true }
 kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.3" }
 serde_json = { workspace = true }
 proptest = "1"
+tempfile = "3"
