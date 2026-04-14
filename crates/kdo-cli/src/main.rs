@@ -45,6 +45,10 @@ enum Commands {
         /// Run independent projects in parallel.
         #[arg(long)]
         parallel: bool,
+
+        /// Extra args appended to the resolved command (use after `--`).
+        #[arg(last = true)]
+        args: Vec<String>,
     },
 
     /// Run an arbitrary command in each project directory.
@@ -166,7 +170,8 @@ fn main() -> miette::Result<()> {
             task,
             filter,
             parallel,
-        } => cmd_run(&task, filter.as_deref(), parallel)?,
+            args,
+        } => cmd_run(&task, filter.as_deref(), parallel, &args)?,
         Commands::Exec {
             command,
             filter,
@@ -207,38 +212,152 @@ fn create_kdo_dir(root: &Path) -> miette::Result<()> {
 }
 
 /// Write `kdo.toml` at workspace root.
+///
+/// Generates a richly-commented template whose tasks match the languages detected
+/// in the workspace. The resulting file both runs out of the box and teaches the
+/// reader the full schema (env, aliases, depends_on, per-project overrides).
 fn write_kdo_toml(
     root: &Path,
     workspace_name: &str,
     projects: &[String],
-) -> miette::Result<WorkspaceConfig> {
-    let mut config = WorkspaceConfig::default();
-    config.workspace.name = workspace_name.to_string();
-
-    // Add default tasks
-    config
-        .tasks
-        .insert("build".into(), "echo 'no build configured'".into());
-    config
-        .tasks
-        .insert("test".into(), "echo 'no test configured'".into());
-    config
-        .tasks
-        .insert("lint".into(), "echo 'no lint configured'".into());
-
+    languages: &std::collections::HashSet<kdo_core::Language>,
+) -> miette::Result<()> {
     let path = root.join(KDO_TOML);
-    config.save(&path).map_err(|e| miette::miette!("{e}"))?;
-    info!(path = %path.display(), "wrote kdo.toml");
+    if path.exists() {
+        info!(path = %path.display(), "kdo.toml already exists, leaving it alone");
+        return Ok(());
+    }
 
-    // Also write a comment header (toml crate doesn't support comments, so prepend manually)
-    let content = std::fs::read_to_string(&path).into_diagnostic()?;
-    let header = format!(
-        "# kdo workspace configuration\n# https://github.com/vivekpal1/kdo\n#\n# Projects: {}\n\n",
-        projects.join(", ")
+    let (build_cmd, test_cmd, lint_cmd, fmt_cmd, dev_cmd) = detect_default_tasks(languages);
+
+    let projects_line = if projects.is_empty() {
+        "# (no projects yet — run `kdo new <name>` to scaffold one)".to_string()
+    } else {
+        format!("# Projects: {}", projects.join(", "))
+    };
+
+    let content = format!(
+        r#"# kdo workspace configuration
+# https://github.com/vivekpal1/kdo
+#
+{projects_line}
+
+[workspace]
+name = "{workspace_name}"
+# Restrict project discovery to specific globs (optional — default scans everything):
+# projects = ["apps/*", "packages/*", "crates/*"]
+# exclude  = ["legacy/**", "archive/**"]
+
+# Short aliases: `kdo run b` → `kdo run build`.
+[aliases]
+b = "build"
+t = "test"
+l = "lint"
+
+# Workspace-wide environment (merged into every task invocation).
+# Loaded before `[env]`; keys here win over env_files.
+# [env]
+# RUST_BACKTRACE = "1"
+# env_files = [".env", ".env.local"]
+
+# ─────────────────────────── TASKS ───────────────────────────
+# Tasks can be declared two ways:
+#
+#   1. Bare command:
+#        build = "cargo build"
+#
+#   2. Full spec with pipeline semantics:
+#        [tasks.build]
+#        command     = "cargo build"
+#        depends_on  = ["^build"]          # "^task" = run `task` in every
+#                                          #          upstream dep project first
+#                                          # "task"  = same project, earlier step
+#                                          # "//task"= workspace-wide task first
+#        inputs      = ["src/**", "Cargo.toml"]
+#        outputs     = ["target/debug/"]
+#        cache       = true                # reserved for future cache backend
+#        persistent  = false               # long-running (dev server) — don't block
+#        env         = {{ RUST_LOG = "info" }}
+
+[tasks]
+build = "{build}"
+test  = "{test}"
+lint  = "{lint}"
+fmt   = "{fmt}"
+dev   = "{dev}"
+
+# Example pipeline (uncomment to use):
+# [tasks.ci]
+# depends_on = ["lint", "test", "build"]
+
+# ────────────────────── PER-PROJECT OVERRIDES ─────────────────
+# Override tasks or env for a specific project:
+# [projects.my-service]
+# env = {{ DATABASE_URL = "postgres://localhost/myservice_dev" }}
+#
+# [projects.my-service.tasks]
+# build = "cargo build --release --features prod"
+"#,
+        build = build_cmd,
+        test = test_cmd,
+        lint = lint_cmd,
+        fmt = fmt_cmd,
+        dev = dev_cmd,
     );
-    std::fs::write(&path, format!("{header}{content}")).into_diagnostic()?;
 
-    Ok(config)
+    std::fs::write(&path, content).into_diagnostic()?;
+    info!(path = %path.display(), "wrote kdo.toml");
+    Ok(())
+}
+
+/// Pick sensible default commands based on languages present in the workspace.
+fn detect_default_tasks(
+    languages: &std::collections::HashSet<kdo_core::Language>,
+) -> (&'static str, &'static str, &'static str, &'static str, &'static str) {
+    use kdo_core::Language;
+    let has = |l: &Language| languages.contains(l);
+
+    if has(&Language::Rust) || has(&Language::Anchor) {
+        (
+            "cargo build",
+            "cargo test",
+            "cargo clippy --all-targets -- -D warnings",
+            "cargo fmt --all",
+            "cargo run",
+        )
+    } else if has(&Language::TypeScript) || has(&Language::JavaScript) {
+        (
+            "npm run build",
+            "npm test",
+            "npm run lint",
+            "npm run format",
+            "npm run dev",
+        )
+    } else if has(&Language::Python) {
+        (
+            "python -m build",
+            "python -m pytest",
+            "ruff check .",
+            "ruff format .",
+            "python -m app",
+        )
+    } else if has(&Language::Go) {
+        (
+            "go build ./...",
+            "go test ./...",
+            "golangci-lint run",
+            "gofmt -w .",
+            "go run .",
+        )
+    } else {
+        (
+            "echo 'configure build in kdo.toml'",
+            "echo 'configure test in kdo.toml'",
+            "echo 'configure lint in kdo.toml'",
+            "echo 'configure fmt in kdo.toml'",
+            "echo 'configure dev in kdo.toml'",
+        )
+    }
 }
 
 /// Write a `.kdoignore` file with sensible defaults.
@@ -416,7 +535,7 @@ fn cmd_init() -> miette::Result<()> {
             .collect();
         ensure_gitignore(&root, &languages)?;
 
-        write_kdo_toml(&root, &workspace_name, &project_names)?;
+        write_kdo_toml(&root, &workspace_name, &project_names, &languages)?;
         let ctx_count = generate_all_context(&root, &graph)?;
 
         eprintln!(
@@ -434,8 +553,9 @@ fn cmd_init() -> miette::Result<()> {
         eprintln!("  {} .gitignore       updated", "create".green());
     } else {
         // Empty directory — scaffold template
-        ensure_gitignore(&root, &std::collections::HashSet::new())?;
-        write_kdo_toml(&root, &workspace_name, &[])?;
+        let empty = std::collections::HashSet::new();
+        ensure_gitignore(&root, &empty)?;
+        write_kdo_toml(&root, &workspace_name, &[], &empty)?;
 
         eprintln!("{} Initialized empty workspace.", "kdo".cyan().bold());
         eprintln!("  {} kdo.toml         workspace config", "create".green());
@@ -533,7 +653,12 @@ fn cmd_new(name: &str) -> miette::Result<()> {
     Ok(())
 }
 
-fn cmd_run(task: &str, filter: Option<&str>, parallel: bool) -> miette::Result<()> {
+fn cmd_run(
+    task: &str,
+    filter: Option<&str>,
+    parallel: bool,
+    extra_args: &[String],
+) -> miette::Result<()> {
     let (graph, root) = discover_graph()?;
     let config = load_config(&root);
 
@@ -550,7 +675,7 @@ fn cmd_run(task: &str, filter: Option<&str>, parallel: bool) -> miette::Result<(
         mode
     );
 
-    run::run_task(&graph, &config, task, filter, parallel)
+    run::run_task(&graph, &config, task, filter, parallel, extra_args)
 }
 
 fn cmd_exec(command: &str, filter: Option<&str>, parallel: bool) -> miette::Result<()> {

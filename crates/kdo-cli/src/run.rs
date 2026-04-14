@@ -1,28 +1,41 @@
 //! Task execution engine — `kdo run` and `kdo exec`.
 //!
-//! Runs tasks in topological order across workspace projects,
-//! with colored output prefixes and optional parallel execution.
+//! Runs tasks in topological order across workspace projects, expanding task
+//! `depends_on` into a linear DAG-respecting plan. Supports env merging,
+//! aliases, per-project overrides, persistent tasks, and pass-through args.
 
-use kdo_core::WorkspaceConfig;
+use kdo_core::{Project, TaskSpec, WorkspaceConfig};
 use kdo_graph::WorkspaceGraph;
 use owo_colors::OwoColorize;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::process::Stdio;
 
 /// Colors for project name prefixes (cycle through these).
 const PROJECT_COLORS: &[&str] = &["cyan", "green", "yellow", "magenta", "blue", "red"];
 
-/// Run a named task from `kdo.toml` or project manifests.
-///
-/// Projects execute in topological order (dependencies first). Pass `parallel = true`
-/// to run independent stages concurrently with rayon.
+/// A single execution step in the run plan.
+#[derive(Debug, Clone)]
+struct Step {
+    project: Project,
+    task_name: String,
+    command: String,
+    env: BTreeMap<String, String>,
+    persistent: bool,
+}
+
+/// Run a named task. Resolves aliases, expands `depends_on`, and executes the
+/// resulting plan. `extra_args` is appended to every resolved command (for
+/// `kdo run build -- --release` pass-through).
 pub fn run_task(
     graph: &WorkspaceGraph,
     config: &WorkspaceConfig,
     task_name: &str,
     filter: Option<&str>,
     parallel: bool,
+    extra_args: &[String],
 ) -> miette::Result<()> {
+    let resolved_name = config.resolve_alias(task_name);
     let projects = get_target_projects(graph, filter);
 
     if projects.is_empty() {
@@ -30,26 +43,31 @@ pub fn run_task(
         return Ok(());
     }
 
-    // Check workspace-level task first
-    let workspace_cmd = config.tasks.get(task_name).cloned();
+    let workspace_env = merge_workspace_env(config);
+    let mut visited: HashSet<(String, String)> = HashSet::new();
+    let mut plan: Vec<Step> = Vec::new();
 
-    // Collect (project, command) pairs — skip projects without a matching task
-    let work: Vec<(kdo_core::Project, String)> = projects
-        .into_iter()
-        .filter_map(|p| {
-            let cmd = resolve_task_command(p, task_name).or_else(|| workspace_cmd.clone())?;
-            Some((p.clone(), cmd))
-        })
-        .collect();
+    for project in &projects {
+        plan_task(
+            graph,
+            config,
+            &workspace_env,
+            project,
+            resolved_name,
+            extra_args,
+            &mut visited,
+            &mut plan,
+        )?;
+    }
 
-    if work.is_empty() {
+    if plan.is_empty() {
         miette::bail!("task '{task_name}' not found in any project or kdo.toml");
     }
 
     let failures = if parallel {
-        run_parallel(&work)?
+        run_parallel(&plan)?
     } else {
-        run_sequential(&work)?
+        run_sequential(&plan)?
     };
 
     if !failures.is_empty() {
@@ -57,6 +75,175 @@ pub fn run_task(
     }
 
     Ok(())
+}
+
+/// Recursively plan a task for a project, expanding `depends_on` first.
+#[allow(clippy::too_many_arguments)]
+fn plan_task(
+    graph: &WorkspaceGraph,
+    config: &WorkspaceConfig,
+    workspace_env: &BTreeMap<String, String>,
+    project: &Project,
+    task_name: &str,
+    extra_args: &[String],
+    visited: &mut HashSet<(String, String)>,
+    plan: &mut Vec<Step>,
+) -> miette::Result<()> {
+    let key = (project.name.clone(), task_name.to_string());
+    if visited.contains(&key) {
+        return Ok(());
+    }
+    visited.insert(key);
+
+    let resolved = resolve_task(config, project, task_name);
+
+    // Expand dependencies before emitting this step.
+    if let Some((spec_opt, _)) = &resolved {
+        if let Some(spec) = spec_opt {
+            for dep in spec.depends_on() {
+                if let Some(upstream_task) = dep.strip_prefix('^') {
+                    let upstream = graph
+                        .dependency_closure(&project.name)
+                        .map_err(|e| miette::miette!("{e}"))?;
+                    for dep_project in upstream {
+                        plan_task(
+                            graph,
+                            config,
+                            workspace_env,
+                            dep_project,
+                            upstream_task,
+                            extra_args,
+                            visited,
+                            plan,
+                        )?;
+                    }
+                } else if let Some(workspace_task) = dep.strip_prefix("//") {
+                    for project_ref in graph.projects() {
+                        plan_task(
+                            graph,
+                            config,
+                            workspace_env,
+                            project_ref,
+                            workspace_task,
+                            extra_args,
+                            visited,
+                            plan,
+                        )?;
+                    }
+                } else {
+                    plan_task(
+                        graph,
+                        config,
+                        workspace_env,
+                        project,
+                        dep,
+                        extra_args,
+                        visited,
+                        plan,
+                    )?;
+                }
+            }
+        }
+    }
+
+    let Some((spec_opt, mut command)) = resolved else {
+        return Ok(());
+    };
+
+    // Composite tasks (depends_on only, no command) emit no step.
+    if command.is_empty() {
+        return Ok(());
+    }
+
+    if !extra_args.is_empty() {
+        command.push(' ');
+        command.push_str(&shell_quote_args(extra_args));
+    }
+
+    let mut env = workspace_env.clone();
+    if let Some(project_cfg) = config.projects.get(&project.name) {
+        for (k, v) in &project_cfg.env {
+            env.insert(k.clone(), v.clone());
+        }
+    }
+    let persistent = if let Some(spec) = &spec_opt {
+        for (k, v) in spec.env() {
+            env.insert(k.clone(), v.clone());
+        }
+        spec.persistent()
+    } else {
+        false
+    };
+
+    plan.push(Step {
+        project: project.clone(),
+        task_name: task_name.to_string(),
+        command,
+        env,
+        persistent,
+    });
+    Ok(())
+}
+
+/// Resolve a task for a project. Returns `(task_spec_if_rich, command_string)`.
+/// Precedence: per-project override > workspace task > manifest script > language default.
+fn resolve_task(
+    config: &WorkspaceConfig,
+    project: &Project,
+    task_name: &str,
+) -> Option<(Option<TaskSpec>, String)> {
+    if let Some(project_cfg) = config.projects.get(&project.name) {
+        if let Some(spec) = project_cfg.tasks.get(task_name) {
+            return Some((Some(spec.clone()), spec.command().unwrap_or("").to_string()));
+        }
+    }
+    if let Some(spec) = config.tasks.get(task_name) {
+        return Some((Some(spec.clone()), spec.command().unwrap_or("").to_string()));
+    }
+    if let Some(cmd) = resolve_task_command(project, task_name) {
+        return Some((None, cmd));
+    }
+    None
+}
+
+/// Merge workspace-level env: env_files first, then `[env]` keys on top.
+fn merge_workspace_env(config: &WorkspaceConfig) -> BTreeMap<String, String> {
+    let mut env = BTreeMap::new();
+    for path in &config.env_files {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some((k, v)) = line.split_once('=') {
+                    let v = v.trim().trim_matches('"').trim_matches('\'');
+                    env.insert(k.trim().to_string(), v.to_string());
+                }
+            }
+        }
+    }
+    for (k, v) in &config.env {
+        env.insert(k.clone(), v.clone());
+    }
+    env
+}
+
+/// POSIX shell-quote arguments so they survive `sh -c`.
+fn shell_quote_args(args: &[String]) -> String {
+    args.iter()
+        .map(|a| {
+            if a.chars()
+                .all(|c| c.is_alphanumeric() || "-_./:=".contains(c))
+            {
+                a.clone()
+            } else {
+                let escaped = a.replace('\'', "'\\''");
+                format!("'{escaped}'")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Run an arbitrary command in each project directory.
@@ -73,15 +260,21 @@ pub fn exec_command(
         return Ok(());
     }
 
-    let work: Vec<(kdo_core::Project, String)> = projects
+    let plan: Vec<Step> = projects
         .into_iter()
-        .map(|p| (p.clone(), command.to_string()))
+        .map(|p| Step {
+            project: p.clone(),
+            task_name: "exec".to_string(),
+            command: command.to_string(),
+            env: BTreeMap::new(),
+            persistent: false,
+        })
         .collect();
 
     let failures = if parallel {
-        run_parallel(&work)?
+        run_parallel(&plan)?
     } else {
-        run_sequential(&work)?
+        run_sequential(&plan)?
     };
 
     if !failures.is_empty() {
@@ -99,7 +292,7 @@ pub fn exec_command(
 fn get_target_projects<'a>(
     graph: &'a WorkspaceGraph,
     filter: Option<&str>,
-) -> Vec<&'a kdo_core::Project> {
+) -> Vec<&'a Project> {
     let ordered = graph.topological_order();
     if let Some(filter_name) = filter {
         ordered
@@ -111,42 +304,47 @@ fn get_target_projects<'a>(
     }
 }
 
-/// Run tasks sequentially, printing prefixed output.
-fn run_sequential(work: &[(kdo_core::Project, String)]) -> miette::Result<Vec<String>> {
+/// Run steps sequentially, printing prefixed output.
+fn run_sequential(plan: &[Step]) -> miette::Result<Vec<String>> {
     let mut failures = Vec::new();
-    for (i, (project, cmd)) in work.iter().enumerate() {
-        let prefix = format_prefix(&project.name, i % PROJECT_COLORS.len());
-        eprintln!("{prefix} {}", cmd.dimmed());
-        let success = execute_in_dir(&project.path, cmd, &prefix)?;
+    for (i, step) in plan.iter().enumerate() {
+        let prefix = format_prefix(&step.project.name, &step.task_name, i % PROJECT_COLORS.len());
+        eprintln!("{prefix} {}", step.command.dimmed());
+        let success = execute_step(step)?;
         if success {
             eprintln!("{prefix} {}", "done".green());
+        } else if step.persistent {
+            eprintln!("{prefix} {}", "persistent task exited".yellow());
         } else {
             eprintln!("{prefix} {}", "FAILED".red().bold());
-            failures.push(project.name.clone());
+            failures.push(step.project.name.clone());
         }
     }
     Ok(failures)
 }
 
-/// Run tasks in parallel using rayon, collecting failures.
-fn run_parallel(work: &[(kdo_core::Project, String)]) -> miette::Result<Vec<String>> {
+/// Run steps in parallel using rayon, collecting failures.
+fn run_parallel(plan: &[Step]) -> miette::Result<Vec<String>> {
     use rayon::prelude::*;
     use std::sync::Mutex;
 
     let failures = Mutex::new(Vec::new());
 
-    work.par_iter().enumerate().for_each(|(i, (project, cmd))| {
-        let prefix = format_prefix(&project.name, i % PROJECT_COLORS.len());
-        eprintln!("{prefix} {}", cmd.dimmed());
-        match execute_in_dir(&project.path, cmd, &prefix) {
+    plan.par_iter().enumerate().for_each(|(i, step)| {
+        let prefix = format_prefix(&step.project.name, &step.task_name, i % PROJECT_COLORS.len());
+        eprintln!("{prefix} {}", step.command.dimmed());
+        match execute_step(step) {
             Ok(true) => eprintln!("{prefix} {}", "done".green()),
+            Ok(false) if step.persistent => {
+                eprintln!("{prefix} {}", "persistent task exited".yellow());
+            }
             Ok(false) => {
                 eprintln!("{prefix} {}", "FAILED".red().bold());
-                failures.lock().unwrap().push(project.name.clone());
+                failures.lock().unwrap().push(step.project.name.clone());
             }
             Err(e) => {
                 eprintln!("{prefix} {} {e}", "ERROR".red().bold());
-                failures.lock().unwrap().push(project.name.clone());
+                failures.lock().unwrap().push(step.project.name.clone());
             }
         }
     });
@@ -155,7 +353,7 @@ fn run_parallel(work: &[(kdo_core::Project, String)]) -> miette::Result<Vec<Stri
 }
 
 /// Try to resolve a task command from a project's manifest or language defaults.
-pub fn resolve_task_command(project: &kdo_core::Project, task_name: &str) -> Option<String> {
+pub fn resolve_task_command(project: &Project, task_name: &str) -> Option<String> {
     match project.language {
         kdo_core::Language::Rust | kdo_core::Language::Anchor => match task_name {
             "build" => Some("cargo build".into()),
@@ -237,31 +435,33 @@ pub fn detect_node_pm(project_dir: &Path) -> &'static str {
     }
 }
 
-/// Execute a shell command in a directory, streaming output.
-fn execute_in_dir(dir: &Path, command: &str, _prefix: &str) -> miette::Result<bool> {
+/// Execute a single plan step in its project directory with merged env.
+fn execute_step(step: &Step) -> miette::Result<bool> {
     use miette::IntoDiagnostic;
 
-    let status = std::process::Command::new("sh")
-        .args(["-c", command])
-        .current_dir(dir)
+    let mut cmd = std::process::Command::new("sh");
+    cmd.args(["-c", &step.command])
+        .current_dir(&step.project.path)
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .into_diagnostic()?;
-
+        .stderr(Stdio::inherit());
+    for (k, v) in &step.env {
+        cmd.env(k, v);
+    }
+    let status = cmd.status().into_diagnostic()?;
     Ok(status.success())
 }
 
-/// Format a colored project name prefix.
-fn format_prefix(name: &str, color_idx: usize) -> String {
-    let colored_name = match PROJECT_COLORS[color_idx] {
-        "cyan" => name.cyan().bold().to_string(),
-        "green" => name.green().bold().to_string(),
-        "yellow" => name.yellow().bold().to_string(),
-        "magenta" => name.magenta().bold().to_string(),
-        "blue" => name.blue().bold().to_string(),
-        "red" => name.red().bold().to_string(),
-        _ => name.bold().to_string(),
+/// Format a colored `[project:task]` prefix.
+fn format_prefix(project: &str, task: &str, color_idx: usize) -> String {
+    let label = format!("{project}:{task}");
+    let colored = match PROJECT_COLORS[color_idx] {
+        "cyan" => label.cyan().bold().to_string(),
+        "green" => label.green().bold().to_string(),
+        "yellow" => label.yellow().bold().to_string(),
+        "magenta" => label.magenta().bold().to_string(),
+        "blue" => label.blue().bold().to_string(),
+        "red" => label.red().bold().to_string(),
+        _ => label.bold().to_string(),
     };
-    format!("[{colored_name}]")
+    format!("[{colored}]")
 }
