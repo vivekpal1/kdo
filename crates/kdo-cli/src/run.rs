@@ -98,50 +98,48 @@ fn plan_task(
     let resolved = resolve_task(config, project, task_name);
 
     // Expand dependencies before emitting this step.
-    if let Some((spec_opt, _)) = &resolved {
-        if let Some(spec) = spec_opt {
-            for dep in spec.depends_on() {
-                if let Some(upstream_task) = dep.strip_prefix('^') {
-                    let upstream = graph
-                        .dependency_closure(&project.name)
-                        .map_err(|e| miette::miette!("{e}"))?;
-                    for dep_project in upstream {
-                        plan_task(
-                            graph,
-                            config,
-                            workspace_env,
-                            dep_project,
-                            upstream_task,
-                            extra_args,
-                            visited,
-                            plan,
-                        )?;
-                    }
-                } else if let Some(workspace_task) = dep.strip_prefix("//") {
-                    for project_ref in graph.projects() {
-                        plan_task(
-                            graph,
-                            config,
-                            workspace_env,
-                            project_ref,
-                            workspace_task,
-                            extra_args,
-                            visited,
-                            plan,
-                        )?;
-                    }
-                } else {
+    if let Some((Some(spec), _)) = &resolved {
+        for dep in spec.depends_on() {
+            if let Some(upstream_task) = dep.strip_prefix('^') {
+                let upstream = graph
+                    .dependency_closure(&project.name)
+                    .map_err(|e| miette::miette!("{e}"))?;
+                for dep_project in upstream {
                     plan_task(
                         graph,
                         config,
                         workspace_env,
-                        project,
-                        dep,
+                        dep_project,
+                        upstream_task,
                         extra_args,
                         visited,
                         plan,
                     )?;
                 }
+            } else if let Some(workspace_task) = dep.strip_prefix("//") {
+                for project_ref in graph.projects() {
+                    plan_task(
+                        graph,
+                        config,
+                        workspace_env,
+                        project_ref,
+                        workspace_task,
+                        extra_args,
+                        visited,
+                        plan,
+                    )?;
+                }
+            } else {
+                plan_task(
+                    graph,
+                    config,
+                    workspace_env,
+                    project,
+                    dep,
+                    extra_args,
+                    visited,
+                    plan,
+                )?;
             }
         }
     }
@@ -289,10 +287,7 @@ pub fn exec_command(
 }
 
 /// Get target projects in topological order, optionally filtered by name.
-fn get_target_projects<'a>(
-    graph: &'a WorkspaceGraph,
-    filter: Option<&str>,
-) -> Vec<&'a Project> {
+fn get_target_projects<'a>(graph: &'a WorkspaceGraph, filter: Option<&str>) -> Vec<&'a Project> {
     let ordered = graph.topological_order();
     if let Some(filter_name) = filter {
         ordered
@@ -308,7 +303,11 @@ fn get_target_projects<'a>(
 fn run_sequential(plan: &[Step]) -> miette::Result<Vec<String>> {
     let mut failures = Vec::new();
     for (i, step) in plan.iter().enumerate() {
-        let prefix = format_prefix(&step.project.name, &step.task_name, i % PROJECT_COLORS.len());
+        let prefix = format_prefix(
+            &step.project.name,
+            &step.task_name,
+            i % PROJECT_COLORS.len(),
+        );
         eprintln!("{prefix} {}", step.command.dimmed());
         let success = execute_step(step)?;
         if success {
@@ -331,7 +330,11 @@ fn run_parallel(plan: &[Step]) -> miette::Result<Vec<String>> {
     let failures = Mutex::new(Vec::new());
 
     plan.par_iter().enumerate().for_each(|(i, step)| {
-        let prefix = format_prefix(&step.project.name, &step.task_name, i % PROJECT_COLORS.len());
+        let prefix = format_prefix(
+            &step.project.name,
+            &step.task_name,
+            i % PROJECT_COLORS.len(),
+        );
         eprintln!("{prefix} {}", step.command.dimmed());
         match execute_step(step) {
             Ok(true) => eprintln!("{prefix} {}", "done".green()),

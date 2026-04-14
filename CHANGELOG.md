@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Rich `kdo.toml` schema: tasks can be declared as bare commands or full specs with
+  `command`, `depends_on`, `inputs`, `outputs`, `cache`, `persistent`, and `env` fields.
+- Task pipelines with three `depends_on` modes:
+  - `"task"` — run this project's earlier task first
+  - `"^task"` — run `task` in every upstream dependency project first
+  - `"//task"` — run `task` across every workspace project first
+- `[aliases]` table for short task names (`b = "build"` → `kdo run b`).
+- `[env]` table and `env_files` for workspace-wide environment variables, merged per task.
+- `[projects.<name>]` sections for per-project task and env overrides.
+- `workspace.projects` and `workspace.exclude` globs for explicit project discovery.
+- Pass-through args after `--` (e.g. `kdo run build -- --release`).
+- Persistent task flag for long-running processes like `dev` servers.
+- `kdo init` now generates a richly-commented `kdo.toml` with language-aware defaults.
+- Prefix format changed from `[project]` to `[project:task]` for clearer pipeline output.
+
 ## [0.1.0-alpha.1] - 2026-04-13
 
 First public alpha. Expect breakage. API surface is not stable.

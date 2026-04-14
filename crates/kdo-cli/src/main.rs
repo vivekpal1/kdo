@@ -313,7 +313,13 @@ dev   = "{dev}"
 /// Pick sensible default commands based on languages present in the workspace.
 fn detect_default_tasks(
     languages: &std::collections::HashSet<kdo_core::Language>,
-) -> (&'static str, &'static str, &'static str, &'static str, &'static str) {
+) -> (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+) {
     use kdo_core::Language;
     let has = |l: &Language| languages.contains(l);
 

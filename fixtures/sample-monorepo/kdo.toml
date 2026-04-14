@@ -1,12 +1,61 @@
-# kdo workspace configuration
-# https://github.com/vivekpal1/kdo
-#
-# Projects: vault-tool, vault_program, vault-program, vault-sdk, common-lib
+# kdo workspace configuration — sample-monorepo
+# Demonstrates the full schema: aliases, env, per-project overrides, depends_on pipelines.
 
 [workspace]
 name = "sample-monorepo"
+# Optional explicit discovery globs:
+# projects = ["anchor/programs/*", "ts/*", "python/*"]
+# exclude  = ["**/node_modules", "**/target"]
 
+# ──────── Aliases (short → canonical task) ────────
+[aliases]
+b = "build"
+t = "test"
+l = "lint"
+
+# ──────── Workspace-wide environment ────────
+[env]
+RUST_BACKTRACE = "1"
+# env_files = [".env", ".env.local"]
+
+# ──────── Simple task (bare command form) ────────
 [tasks]
-build = "echo 'no build configured'"
-lint = "echo 'no lint configured'"
-test = "echo 'no test configured'"
+lint = "cargo clippy --all-targets -- -D warnings"
+fmt  = "cargo fmt --all"
+
+# ──────── Rich tasks with pipeline semantics ────────
+[tasks.build]
+command    = "cargo build"
+depends_on = ["^build"]                 # build all upstream deps first
+inputs     = ["src/**", "Cargo.toml", "programs/**", "sdk/**"]
+outputs    = ["target/debug/", "target/release/"]
+cache      = true
+
+[tasks.test]
+command    = "cargo test"
+depends_on = ["build"]                  # same-project build must complete first
+inputs     = ["src/**", "tests/**"]
+cache      = true
+
+[tasks.dev]
+command    = "cargo watch -x run"
+persistent = true                        # long-running; won't block downstream
+cache      = false
+
+# Composite task — no command of its own, just runs others.
+[tasks.ci]
+depends_on = ["lint", "test"]
+
+# ──────── Per-project overrides ────────
+# Anchor program: different build/test pipeline.
+[projects.vault_program]
+env = { ANCHOR_PROVIDER_URL = "http://localhost:8899" }
+
+[projects.vault_program.tasks]
+build = "anchor build"
+test  = "anchor test"
+
+# TypeScript SDK: use bun instead of npm.
+[projects.vault-sdk.tasks]
+build = "bun run build"
+test  = "bun test"

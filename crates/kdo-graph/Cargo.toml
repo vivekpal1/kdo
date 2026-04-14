@@ -17,6 +17,7 @@ kdo-resolver = { path = "../kdo-resolver", version = "=0.1.0-alpha.1" }
 petgraph = { workspace = true }
 blake3 = { workspace = true }
 ignore = { workspace = true }
+globset = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

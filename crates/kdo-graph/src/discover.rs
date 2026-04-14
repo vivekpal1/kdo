@@ -89,6 +89,9 @@ impl WorkspaceGraph {
             .map(|entry| entry.into_path())
             .collect();
 
+        // Apply kdo.toml workspace.projects / workspace.exclude globs if present.
+        let manifest_paths = apply_workspace_globs(&root, manifest_paths);
+
         debug!(count = manifest_paths.len(), "found manifest files");
 
         // Filter out manifests in directories that have a more specific manifest.
@@ -372,6 +375,56 @@ impl WorkspaceGraph {
         result.sort();
         Ok(result)
     }
+}
+
+/// Apply `workspace.projects` and `workspace.exclude` glob filters from `kdo.toml`.
+/// If no `kdo.toml` is present or no globs are set, returns the input unchanged.
+fn apply_workspace_globs(root: &Path, paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    use globset::{Glob, GlobSetBuilder};
+
+    let kdo_toml = root.join("kdo.toml");
+    if !kdo_toml.exists() {
+        return paths;
+    }
+    let Ok(config) = kdo_core::WorkspaceConfig::load(&kdo_toml) else {
+        return paths;
+    };
+
+    let build_set = |patterns: &[String]| -> Option<globset::GlobSet> {
+        if patterns.is_empty() {
+            return None;
+        }
+        let mut builder = GlobSetBuilder::new();
+        for p in patterns {
+            if let Ok(g) = Glob::new(p) {
+                builder.add(g);
+            }
+        }
+        builder.build().ok()
+    };
+
+    let include = build_set(&config.workspace.project_globs);
+    let exclude = build_set(&config.workspace.exclude);
+
+    paths
+        .into_iter()
+        .filter(|path| {
+            let Ok(rel) = path.strip_prefix(root) else {
+                return true;
+            };
+            let parent_rel = rel.parent().unwrap_or(Path::new(""));
+
+            if let Some(ex) = &exclude {
+                if ex.is_match(parent_rel) {
+                    return false;
+                }
+            }
+            if let Some(inc) = &include {
+                return inc.is_match(parent_rel);
+            }
+            true
+        })
+        .collect()
 }
 
 /// Filter manifests to prefer more specific ones (Anchor.toml > Cargo.toml in same dir).
