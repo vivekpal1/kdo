@@ -31,8 +31,8 @@
 <span class="text-ink">command</span>    = <span class="text-tide">"cargo watch -x run"</span>
 <span class="text-ink">persistent</span> = <span class="text-tide">true</span>
 
-<span class="text-ink-3">[projects.vault-program.tasks]</span>
-<span class="text-ink">build</span> = <span class="text-tide">"anchor build"</span></code></pre>
+<span class="text-ink-3">[projects.api.tasks]</span>
+<span class="text-ink">build</span> = <span class="text-tide">"cargo build --release"</span></code></pre>
     </div>
 
     <div>
@@ -48,14 +48,14 @@
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">^task</code> runs the task in every upstream dep first —
-            topological build orchestration in one character.
+            <code class="font-mono text-sm text-ink">^task</code> runs the task in every upstream dep first.
+            Topological build orchestration in one character.
           </span>
         </li>
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">//task</code> fans the task out across the whole workspace —
+            <code class="font-mono text-sm text-ink">//task</code> fans the task across the whole workspace.
             CI in one line.
           </span>
         </li>
@@ -69,8 +69,8 @@
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">[projects.&lt;name&gt;]</code> overrides any task or env per
-            project — Anchor, Bun, and Cargo coexisting peacefully.
+            <code class="font-mono text-sm text-ink">[projects.&lt;name&gt;]</code> overrides any task or env for
+            one project. Anchor, Bun, and Cargo coexist in the same file.
           </span>
         </li>
       </ul>

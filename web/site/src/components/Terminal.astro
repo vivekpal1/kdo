@@ -1,5 +1,5 @@
 ---
-// Terminal-card showing real `kdo` output. Static — typography does the work.
+// Terminal-card showing real `kdo` output. Static. Typography does the work.
 // Uses Geist Mono with tabular numerics. Very subtle window chrome.
 ---
 
@@ -18,14 +18,18 @@
     <!-- output -->
     <pre class="mt-3 overflow-x-auto font-mono text-[13px] leading-6 text-ink-2 tabular-nums sm:text-sm"><code><span class="text-ink-3">$</span> <span class="text-ink">kdo init</span>
 <span class="text-ink-3">  discovering workspace…</span>
-<span class="text-tide">✓</span> <span class="text-ink">11 projects</span> <span class="text-ink-3">found</span> <span class="text-ink-3">(rust · ts · python · anchor · go)</span>
-<span class="text-tide">✓</span> <span class="text-ink-3">graph built —</span> <span class="text-ink">14 edges, 0 cycles</span>
-<span class="text-tide">✓</span> <span class="text-ink-3">context generated —</span> <span class="text-ink">11 files, 28k tokens</span>
+<span class="text-tide">✓</span> <span class="text-ink">11 projects</span> <span class="text-ink-3">found</span> <span class="text-ink-3">(rust · ts · python · go)</span>
+<span class="text-tide">✓</span> <span class="text-ink-3">graph built:</span> <span class="text-ink">14 edges, 0 cycles</span>
+<span class="text-tide">✓</span> <span class="text-ink-3">context generated:</span> <span class="text-ink">11 files, 28k tokens</span>
 
-<span class="text-ink-3">$</span> <span class="text-ink">kdo run ci --filter vault-program</span>
-<span class="text-ink-3">[</span><span class="text-tide">vault-program:lint</span><span class="text-ink-3">]</span> <span class="text-ink">cargo clippy --all-targets -- -D warnings</span>
-<span class="text-ink-3">[</span><span class="text-tide">vault-program:lint</span><span class="text-ink-3">]</span> <span class="text-ink-3">done</span>
-<span class="text-ink-3">[</span><span class="text-tide">vault-program:test</span><span class="text-ink-3">]</span> <span class="text-ink">cargo nextest run</span>
-<span class="text-ink-3">[</span><span class="text-tide">vault-program:test</span><span class="text-ink-3">]</span> <span class="text-ink-3">42 passed in 1.8s</span></code></pre>
+<span class="text-ink-3">$</span> <span class="text-ink">kdo setup claude --global</span>
+<span class="text-tide">✓</span> <span class="text-ink-3">registered kdo with Claude Code (user scope)</span>
+<span class="text-tide">✓</span> <span class="text-ink-3">wrote</span> <span class="text-ink">~/.claude/CLAUDE.md</span>
+
+<span class="text-ink-3">$</span> <span class="text-ink">kdo run ci --filter api</span>
+<span class="text-ink-3">[</span><span class="text-tide">api:lint</span><span class="text-ink-3">]</span> <span class="text-ink">cargo clippy --all-targets -- -D warnings</span>
+<span class="text-ink-3">[</span><span class="text-tide">api:lint</span><span class="text-ink-3">]</span> <span class="text-ink-3">done</span>
+<span class="text-ink-3">[</span><span class="text-tide">api:test</span><span class="text-ink-3">]</span> <span class="text-ink">cargo nextest run</span>
+<span class="text-ink-3">[</span><span class="text-tide">api:test</span><span class="text-ink-3">]</span> <span class="text-ink-3">42 passed in 1.8s</span></code></pre>
   </div>
 </div>

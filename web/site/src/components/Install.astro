@@ -5,7 +5,7 @@ const tabs = [
   {
     label: "binary",
     hint: "fastest, no Rust required",
-    cmd: "curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash -s -- --from-release",
+    cmd: "curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash -s -- --from-release",
   },
   {
     label: "cargo",
@@ -22,9 +22,11 @@ const tabs = [
       One command. Two flavors.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      Pre-<code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">0.1.0</code>, so cargo
-      needs the version flag. Once stable ships, plain
+      Pre-<code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">0.1.0</code>, so cargo needs the
+      version flag. Once stable ships, plain
       <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">cargo install kdo</code> will work.
+      Then run <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup claude</code> or
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup openclaw</code> to wire your agent.
     </p>
   </div>
 

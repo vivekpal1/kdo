@@ -17,7 +17,7 @@ Initialize a workspace. Scaffolds a template on an empty directory, or adopts an
 kdo init
 ```
 
-**Side effects:** creates `kdo.toml`, `.kdoignore`, `.kdo/` cache, updates `.gitignore`. Safe to re-run — it won't overwrite an existing `kdo.toml`.
+**Side effects:** creates `kdo.toml`, `.kdoignore`, `.kdo/` cache, updates `.gitignore`. Safe to re-run. It won't overwrite an existing `kdo.toml`.
 
 ### `kdo new <name>`
 
@@ -132,7 +132,7 @@ kdo exec "git status" --parallel
 
 ### `kdo affected [--base ref]`
 
-List projects affected by changes since a git ref. Uses the dependency graph — changing a leaf marks every dependent as affected.
+List projects affected by changes since a git ref. Uses the dependency graph. Changing a leaf marks every dependent as affected.
 
 ```bash
 kdo affected                    # since main
@@ -233,8 +233,8 @@ Only supported platforms get prebuilt binaries (x86_64/aarch64 linux, x86_64/aar
 
 kdo reads:
 
-- `RUST_LOG` — standard `tracing` filter. `RUST_LOG=debug kdo init` is the first thing to try when discovery misbehaves.
-- `NO_COLOR` — set to disable ANSI colors in output.
+- `RUST_LOG`: standard `tracing` filter. `RUST_LOG=debug kdo init` is the first thing to try when discovery misbehaves.
+- `NO_COLOR`: set to disable ANSI colors in output.
 
 ## Exit codes
 
@@ -243,7 +243,7 @@ kdo reads:
 | 0 | Success |
 | 1 | Generic error (check stderr) |
 | 2 | Task(s) failed (from `kdo run` / `kdo exec`) |
-| 101 | Rust panic — please file a bug |
+| 101 | Rust panic (please file a bug) |
 
 ## Global flags
 

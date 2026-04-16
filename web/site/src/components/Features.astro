@@ -3,20 +3,20 @@ const features = [
   {
     title: "Polyglot graph",
     body:
-      "Rust · TypeScript · Python · Go · Anchor — one dependency graph. Discovery is parallel, deterministic, and respects every .gitignore in the tree.",
-    accent: "language-agnostic",
+      "Rust, TypeScript, Python, Go, Anchor in one dependency graph. Discovery is parallel, deterministic, and respects every .gitignore in the tree. The monorepo reality no one else handles well for agents.",
+    accent: "polyglot-native",
   },
   {
-    title: "MCP context",
+    title: "Agent runtime over MCP",
     body:
-      "Token-budgeted context bundles served over JSON-RPC. Claude Code, Cursor, and any MCP client get structured signatures instead of file walks.",
-    accent: "agent-native",
+      "Seven tools plus a resources endpoint over MCP stdio. Claude Code, OpenClaw, Cursor, and any MCP client read structured context instead of walking the filesystem.",
+    accent: "one endpoint",
   },
   {
-    title: "Pipeline runner",
+    title: "Loop guards",
     body:
-      "Tasks with depends_on, env merging, aliases, per-project overrides, and pass-through args. Topological order across languages, parallel within stages.",
-    accent: "task graph",
+      "Every tools/call passes through a sliding-window detector. Duplicate calls return a structured error, so OpenClaw stops burning a day's budget retrying the same mistake.",
+    accent: "token-burn defense",
   },
 ];
 ---
@@ -25,11 +25,10 @@ const features = [
   <div class="mx-auto max-w-2xl text-center">
     <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">why kdo</p>
     <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-      One binary for the whole monorepo.
+      Compile the monorepo. Serve it to the agent.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      Turbo and Nx don't speak Rust. Bun and pnpm don't speak Python. kdo speaks all of them — and serves
-      the result to your AI agent in tokens it can afford.
+      Coding agents read too much. They open a repo, traverse the filesystem, and load files the task never needed. kdo compiles your workspace into an agent-readable shape and serves it over MCP, so the agent gets the signal without the noise.
     </p>
   </div>
 

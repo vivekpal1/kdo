@@ -1,33 +1,49 @@
 ---
 layout: ../../layouts/Docs.astro
 title: Introduction
-description: kdo is a context-native workspace manager. One binary, one dependency graph, one MCP server, one pipeline runner.
+description: kdo is the workspace runtime for AI coding agents. One MCP endpoint that makes Claude Code, OpenClaw, Cursor, and anything else on MCP faster, cheaper, and less prone to token-burn loops on polyglot monorepos.
 slug: ""
 ---
 
-kdo is a **workspace manager for the agent era**. It scans a polyglot monorepo, builds a dependency graph, generates token-budgeted context for AI agents, runs tasks across projects, and serves the whole thing over MCP.
+kdo is the workspace runtime for AI coding agents.
 
-Think turbo/moon/nx — but it speaks Rust, TypeScript, Python, Go, and Anchor, and ships with a built-in MCP server so coding agents stop walking the filesystem blindly.
+## The problem
+
+Coding agents read too much. A Claude Code or OpenClaw session opens a monorepo, traverses the filesystem, loads files the task never needed, and burns tokens before solving anything. OpenClaw users hit loops that drain a day's budget in minutes. Existing workspace tools (Turbo, Nx, Moon, Bun) optimize for humans running builds. None of them treat agent context efficiency as a design goal.
 
 ## What kdo does
 
-- **Discovers projects** across mixed-language monorepos. One parser per manifest type (Cargo.toml, package.json, pyproject.toml, Anchor.toml, go.mod), one graph, one cache.
-- **Generates context** — token-budgeted summaries + public API signatures extracted via tree-sitter. Per-project markdown files an AI agent can read in seconds.
+Compiles your monorepo into an agent-readable representation. Serves it over MCP. Detects loops. Enforces token budgets. Works in Claude Code and OpenClaw from the same endpoint, and works in any other MCP-compatible agent through the generic profile.
+
+One binary. One MCP endpoint. Everywhere MCP goes.
+
+## How it works
+
+- **Discovers projects** across mixed-language monorepos. One parser per manifest type (`Cargo.toml`, `package.json`, `pyproject.toml`, `Anchor.toml`, `go.mod`), one graph, one cache.
+- **Generates context.** Token-budgeted summaries plus public API signatures extracted via tree-sitter. Per-project markdown files an agent can read in seconds.
 - **Runs tasks** with `depends_on`, env merging, per-project overrides, pass-through args. Topological order across languages, parallel within stages.
-- **Serves MCP** — seven tools (`kdo_list_projects`, `kdo_get_context`, `kdo_read_symbol`, `kdo_dep_graph`, `kdo_affected`, `kdo_search_code`, `kdo_run_task`) plus `resources/list` for cached context files. One `kdo serve` and Claude Code, Cursor, Openclaw, Zed, and Cline all work.
+- **Serves MCP.** Seven tools (`kdo_list_projects`, `kdo_get_context`, `kdo_read_symbol`, `kdo_dep_graph`, `kdo_affected`, `kdo_search_code`, `kdo_run_task`) plus `resources/list` for cached context files. One `kdo serve` and Claude Code, Cursor, OpenClaw, Zed, and Cline all work.
+- **Guards against loops.** Every tool call passes through a sliding-window detector. Duplicate calls return a structured error so the agent changes strategy instead of retrying the same mistake.
+
+## Who it's for
+
+- **OpenClaw users** who lose sessions to token-burn loops. kdo's loop guards exist because OpenClaw loops burn tokens fast and silently; the window under the openclaw profile is 3.
+- **Claude Code users** on polyglot monorepos. One MCP registration, every project gets the same tools.
+- **Teams** running Rust plus TypeScript plus Python plus Anchor in one repo who got tired of agent navigation dominating their token bill.
 
 ## What kdo is not
 
-- **Not a package manager.** It doesn't install dependencies, manage lockfiles, or resolve semver. Use bun/pnpm/cargo/pip for that. kdo is a layer on top.
-- **Not production-ready.** `0.1.0-alpha.3` shipped two days ago. API will break before `0.1.0` stable. Use it for side projects, AI-heavy dev loops, and polyglot monorepos where you've accepted early-adopter risk.
+- **Not a package manager.** It doesn't install dependencies, manage lockfiles, or resolve semver. Use bun/pnpm/cargo/pip for that. kdo runs alongside them.
+- **Not production-ready.** `0.2.0-alpha.1`, shipping this week. API will break before `0.1.0` stable. Use it for side projects, AI-heavy dev loops, and polyglot monorepos where you accept early-adopter risk.
 
-## Fair comparison
+## Where kdo sits
 
 | | kdo | turbo | nx | bun | pnpm |
 |---|---|---|---|---|---|
 | Polyglot graph | ● | ○ | ◐ | ○ | ○ |
 | MCP built-in | ● | ○ | ○ | ○ | ○ |
 | Token-budgeted context | ● | ○ | ○ | ○ | ○ |
+| Loop guards for agents | ● | ○ | ○ | ○ | ○ |
 | Task pipelines | ● | ◐ | ● | ○ | ○ |
 | Per-project overrides | ● | ● | ● | ○ | ○ |
 | Single static binary | ● | ○ | ○ | ● | ○ |
@@ -37,7 +53,7 @@ Think turbo/moon/nx — but it speaks Rust, TypeScript, Python, Go, and Anchor, 
 
 ## Next steps
 
-- [Getting started](./getting-started) — install, `kdo init`, first run
-- [CLI reference](./cli) — every command with flags
-- [kdo.toml schema](./config) — the config format
-- [MCP server](./mcp) — tools, resources, and how to register with agents
+- [Getting started](./getting-started): install, `kdo init`, first run, `kdo setup <agent>`
+- [CLI reference](./cli): every command with flags
+- [kdo.toml schema](./config): the config format
+- [MCP server](./mcp): tools, resources, agent profiles, loop guards

@@ -1,17 +1,27 @@
 # kdo
 
-**Workspace manager for the agent era. Cuts AI agent token consumption on polyglot monorepos.**
+**Workspace runtime for AI coding agents. Stop your agent from burning tokens exploring your repo.**
 
-kdo scans your workspace, builds a dependency graph, and serves structured context via MCP instead of letting agents traverse the filesystem blindly. Turbo/Nx/Moon/Bun don't speak Rust + Python + Anchor in one graph — kdo does, and ships an MCP server with seven tools, agent profiles (Claude Code, OpenClaw, generic), and a loop guard that prevents deadly token-burn retries.
+Coding agents read too much. A Claude Code or OpenClaw session opens a monorepo, traverses the filesystem, loads files the task never needed, and burns tokens before solving anything. OpenClaw users hit loops that drain a day's budget in minutes. Existing workspace tools (Turbo, Nx, Moon, Bun) optimize for humans running builds. None of them treat agent context efficiency as a design goal.
+
+kdo compiles your monorepo into an agent-readable representation. Serves it over MCP. Detects loops. Enforces token budgets. Works in Claude Code and OpenClaw from the same endpoint, and in any other MCP-compatible agent via the generic profile.
+
+One binary. One MCP endpoint. Everywhere MCP goes.
+
+- **Agent-agnostic.** Works with any MCP-compatible client. Claude Code and OpenClaw are first-class; Cursor, Aider, Zed, Cline, Continue run on the generic profile.
+- **OpenClaw-aware.** The loop guards exist because OpenClaw loops burn tokens fast and silently. The window under `--agent openclaw` is 3 identical calls.
+- **Polyglot-native.** Rust, TypeScript, Python, Anchor, Go in one workspace. The monorepo reality nobody else handles well for agents.
+- **One setup, everywhere.** Install kdo once; every agent you use gets the same workspace intelligence.
+- **Open source, Rust, fast.** MIT licensed.
 
 ## Install
 
-kdo is pre-`0.1.0` — all current releases are alphas. You have to opt in explicitly.
+kdo is pre-`0.1.0`: all current releases are alphas. You have to opt in explicitly.
 
-**Prebuilt binary (fastest — no Rust toolchain needed):**
+**Prebuilt binary (fastest, no Rust toolchain needed):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash -s -- --from-release
+curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash -s -- --from-release
 ```
 
 **From crates.io (requires the version flag for pre-releases):**
@@ -29,7 +39,7 @@ cargo install kdo --version "0.2.0-alpha.1"
 ```bash
 cargo install --git https://github.com/vivekpal1/kdo
 # or
-curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash
+curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash
 ```
 
 **Docker:**
@@ -91,13 +101,13 @@ kdo serve --transport stdio
 
 ### `kdo init`
 
-On an **empty directory**: scaffolds a workspace template with `kdo.toml`, `.kdo/`, `.kdoignore`, and `.gitignore` — ready for `kdo new`.
+On an **empty directory**: scaffolds a workspace template with `kdo.toml`, `.kdo/`, `.kdoignore`, and `.gitignore`, ready for `kdo new`.
 
 On an **existing repo**: discovers all projects, builds the dependency graph, and generates context files.
 
 Creates two things:
 
-1. **`kdo.toml`** at workspace root (committed) — workspace declaration + task definitions:
+1. **`kdo.toml`** at workspace root (committed) with workspace declaration + task definitions:
 
 ```toml
 [workspace]
@@ -109,7 +119,7 @@ test = "cargo test"
 lint = "cargo clippy"
 ```
 
-2. **`.kdo/`** directory (gitignored) — cache for agents:
+2. **`.kdo/`** directory (gitignored), cache for agents:
 
 ```
 .kdo/
@@ -133,7 +143,7 @@ Interactive project scaffolding. Prompts for language, project type, and framewo
 
 ### `.kdoignore`
 
-Works like `.gitignore` — controls which files kdo excludes from context generation and content hashing. Created automatically by `kdo init` with sensible defaults:
+Works like `.gitignore`, controls which files kdo excludes from context generation and content hashing. Created automatically by `kdo init` with sensible defaults:
 
 ```
 node_modules/
@@ -148,7 +158,7 @@ __pycache__/
 
 ## Benchmark
 
-Reproducible via `kdo bench` — measures the bytes an fs-walking agent would read
+Reproducible via `kdo bench`, measures the bytes an fs-walking agent would read
 against the bytes kdo actually returns for the same scope. No mocking, no fake
 numbers.
 
@@ -161,7 +171,7 @@ numbers.
 | refactor-fee-harvest | 990 tok | 640 tok | **35.3%** |
 | **average** | 2.0k tok | 1.6k tok | **19.4%** |
 
-These numbers are from a deliberately small fixture — real monorepos have much
+These numbers are from a deliberately small fixture, real monorepos have much
 larger source files, which makes the baseline grow while kdo stays capped at
 the context-budget cost. Run `kdo bench` on your own repo with a real
 `.kdo/bench/tasks.toml` for honest numbers against your actual codebase.
@@ -192,9 +202,9 @@ graph LR
 |-------|---------|
 | `kdo-core` | Types (`Project`, `Dependency`, `Language`), errors (`KdoError`), token estimator |
 | `kdo-resolver` | Manifest parsers: `Cargo.toml`, `package.json`, `pyproject.toml`, `Anchor.toml` |
-| `kdo-graph` | `WorkspaceGraph` via petgraph — discovery, DFS/BFS queries, blake3 hashing, cycle detection |
+| `kdo-graph` | `WorkspaceGraph` via petgraph, discovery, DFS/BFS queries, blake3 hashing, cycle detection |
 | `kdo-context` | Tree-sitter signature extraction, context generation, token budget enforcement |
-| `kdo-mcp` | MCP server (built on rmcp 0.16) — 7 tools, resources, loop-guard, agent profiles |
+| `kdo-mcp` | MCP server (built on rmcp 0.16), 7 tools, resources, loop-guard, agent profiles |
 | `kdo-cli` | Clap subcommands, interactive scaffolding, tabled output |
 
 ## Agent setup
@@ -207,7 +217,7 @@ kdo setup openclaw --global       # OpenClaw, AgentSkills-spec SKILL.md + opencl
 kdo setup claude --dry-run        # preview every file + command, touch nothing
 ```
 
-Drop `--global` to write into the current workspace only. Re-running is safe —
+Drop `--global` to write into the current workspace only. Re-running is safe -
 sentinels preserve surrounding user content; JSON merges preserve siblings.
 
 ### Manual registration (any MCP client)
@@ -221,7 +231,7 @@ verbosity. Profiles: `claude`, `openclaw`, `generic` (default).
 
 **Loop guard.** The server returns a structured `"loop detected"` error after
 N identical tool calls in a row (OpenClaw: 3, others: 5). Prevents deadly
-token-burn loops — the agent sees the error and changes strategy instead of
+token-burn loops, the agent sees the error and changes strategy instead of
 silently retrying.
 
 ## MCP tools
@@ -237,10 +247,10 @@ silently retrying.
 
 ## Supported languages
 
-- **Rust** — `Cargo.toml`, tree-sitter signature extraction
-- **TypeScript / JavaScript** — `package.json`, `tsconfig.json` detection
-- **Python** — `pyproject.toml` (PEP 621 + Poetry)
-- **Solana Anchor** — `Anchor.toml`, CPI dependency tracking
+- **Rust**: `Cargo.toml`, tree-sitter signature extraction
+- **TypeScript / JavaScript**: `package.json`, `tsconfig.json` detection
+- **Python**: `pyproject.toml` (PEP 621 + Poetry)
+- **Solana Anchor**: `Anchor.toml`, CPI dependency tracking
 
 ## CLI reference
 
@@ -262,7 +272,7 @@ All commands support `--format json` for scripting.
 
 ## Composability
 
-kdo operates at the **workspace layer** — discovering projects, building the dependency graph, and serving structured context. For symbol-level intelligence within a project, see [scope-cli](https://github.com/nicholasgasior/scope-cli) — they compose cleanly.
+kdo operates at the **workspace layer**, discovering projects, building the dependency graph, and serving structured context. For symbol-level intelligence within a project, see [scope-cli](https://github.com/nicholasgasior/scope-cli), they compose cleanly.
 
 ## Roadmap
 

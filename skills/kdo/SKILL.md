@@ -34,10 +34,10 @@ cargo install --git https://github.com/vivekpal1/kdo
 
 ```bash
 # Build from source
-curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash
+curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash
 
 # Or download prebuilt binary
-curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash -s -- --from-release
+curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash -s -- --from-release
 ```
 
 ### Verify installation

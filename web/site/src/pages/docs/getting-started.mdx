@@ -5,7 +5,7 @@ description: Install kdo, initialize a workspace, run your first task, and regis
 slug: "getting-started"
 ---
 
-A 5-minute path from zero to a running kdo workspace with MCP wired into Claude Code or Openclaw.
+A 5-minute path from zero to a running kdo workspace with MCP wired into Claude Code or OpenClaw.
 
 ## 1. Install
 
@@ -14,13 +14,13 @@ Pick one. All three leave you with a `kdo` binary on your PATH.
 **Prebuilt binary** (fastest, no Rust toolchain):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash -s -- --from-release
+curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash -s -- --from-release
 ```
 
 **From crates.io** (requires an explicit version during alpha):
 
 ```bash
-cargo install kdo --version "0.1.0-alpha.3"
+cargo install kdo --version "0.2.0-alpha.1"
 ```
 
 **From source** (for contributors):
@@ -35,7 +35,7 @@ Verify:
 
 ```bash
 kdo --version
-# kdo 0.1.0-alpha.3
+# kdo 0.2.0-alpha.1
 ```
 
 ## 2. Initialize a workspace
@@ -56,7 +56,7 @@ What shows up:
 |---|---|---|
 | `kdo.toml` | Workspace config + tasks | Yes |
 | `.kdoignore` | Context exclusion rules | Yes |
-| `.kdo/` | Cache (context, graph snapshot) | No — gitignored |
+| `.kdo/` | Cache (context, graph snapshot) | No (gitignored) |
 | `.kdo/context/*.md` | Per-project AI context | No |
 
 ## 3. Explore the workspace
@@ -68,7 +68,7 @@ kdo graph --format dot | dot -Tsvg > graph.svg
 kdo context vault-sdk --budget 2048
 ```
 
-Each of these is instant — everything is cached from `kdo init`.
+Each of these is instant. Everything is cached from `kdo init`.
 
 ## 4. Run a task
 
@@ -97,7 +97,7 @@ One command:
 kdo setup claude --global
 ```
 
-This registers kdo as a user-scope MCP server (via `claude mcp add`), updates `~/.claude/CLAUDE.md` with a usage block, and seeds shared agent memory. Re-running is safe — it converges to the same state.
+This registers kdo as a user-scope MCP server (via `claude mcp add`), updates `~/.claude/CLAUDE.md` with a usage block, and seeds shared agent memory. Re-running is safe. It converges to the same state.
 
 Preview without touching disk:
 
@@ -124,7 +124,7 @@ Writes an AgentSkills-spec `SKILL.md` under `~/.openclaw/skills/kdo/`, merges th
 
 ### Workspace-scoped (no `--global`)
 
-Drop `--global` and `kdo setup` writes to the current workspace only — local MCP scope for Claude, per-project skill + `AGENTS.md` for OpenClaw, plus `.kdo/memory/MEMORY.md` either way.
+Drop `--global` and `kdo setup` writes to the current workspace only. Local MCP scope for Claude, per-project skill + `AGENTS.md` for OpenClaw, plus `.kdo/memory/MEMORY.md` either way.
 
 ### Any other MCP client
 
@@ -138,9 +138,9 @@ The server exposes 7 tools and a `resources/list` endpoint for the context files
 
 ## 6. Keep it fresh
 
-- **When you add a project** — run `kdo init` again to regenerate context.
-- **When you upgrade** — `kdo upgrade` pulls the latest release binary with an atomic replace.
-- **When something breaks** — `kdo doctor` walks the workspace and reports the first missing piece.
+- **When you add a project:** run `kdo init` again to regenerate context.
+- **When you upgrade:** `kdo upgrade` pulls the latest release binary with an atomic replace.
+- **When something breaks:** `kdo doctor` walks the workspace and reports the first missing piece.
 
 ## Recommended first project
 
@@ -160,6 +160,6 @@ The fixture mixes Anchor, Rust, TypeScript, and Python so every discovery and ex
 
 ## Next
 
-- [CLI reference](./cli) — every command, flag, and example
-- [kdo.toml schema](./config) — aliases, env, task pipelines, per-project overrides
-- [MCP server](./mcp) — the seven tools in detail
+- [CLI reference](./cli): every command, flag, and example
+- [kdo.toml schema](./config): aliases, env, task pipelines, per-project overrides
+- [MCP server](./mcp): the seven tools in detail

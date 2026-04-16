@@ -7,7 +7,7 @@ slug: "config"
 
 `kdo.toml` lives at your workspace root and is committed to git. It's the single source of truth for workspace identity, task pipelines, environment, and per-project overrides.
 
-The full schema is optional — an empty `[workspace]` section works. Tasks can be bare command strings or full pipeline specs; mix and match.
+The full schema is optional. An empty `[workspace]` section works. Tasks can be bare command strings or full pipeline specs; mix and match.
 
 ## Quickstart example
 
@@ -58,7 +58,7 @@ test  = "anchor test"
 | `projects` | string[] | `[]` | Glob patterns restricting discovery. Empty = scan everything. |
 | `exclude` | string[] | `[]` | Glob patterns removed from discovery after `projects` filtering. |
 
-Globs use `/` as a literal separator — `packages/*` matches direct children only. Use `packages/**` for recursive.
+Globs use `/` as a literal separator, `packages/*` matches direct children only. Use `packages/**` for recursive.
 
 If `pnpm-workspace.yaml` is present at the root, its `packages:` list merges with `[workspace].projects` (and `!`-prefixed entries merge into `exclude`). You get pnpm workspace support for free.
 
@@ -73,7 +73,7 @@ t = "test"
 l = "lint"
 ```
 
-`kdo run b` behaves exactly like `kdo run build`. Aliases resolve once, before anything else, and only apply to the invoked task — not to `depends_on` entries (which must use real task names).
+`kdo run b` behaves exactly like `kdo run build`. Aliases resolve once, before anything else, and only apply to the invoked task. Not to `depends_on` entries (which must use real task names).
 
 ## `[env]`
 
@@ -98,7 +98,7 @@ Later layers win. Inspect the resolved environment for any task with `kdo run <t
 
 ## `[tasks]`
 
-### Bare form — string command
+### Bare form (string command)
 
 ```toml
 [tasks]
@@ -108,7 +108,7 @@ fmt  = "cargo fmt --all"
 
 Equivalent to a full spec with only `command` set.
 
-### Full form — pipeline spec
+### Full form (pipeline spec)
 
 ```toml
 [tasks.build]
@@ -123,7 +123,7 @@ env        = { RUST_LOG = "info" }
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
-| `command` | string | — | Shell command run via `sh -c`. Optional if the task is purely composite (only `depends_on`). |
+| `command` | string | (none) | Shell command run via `sh -c`. Optional if the task is purely composite (only `depends_on`). |
 | `depends_on` | string[] | `[]` | Tasks to run before this one. See semantics below. |
 | `inputs` | string[] | `[]` | Glob patterns contributing to the cache key. Reserved for the upcoming cache backend. |
 | `outputs` | string[] | `[]` | Paths this task produces. Reserved for the cache backend. |
@@ -133,7 +133,7 @@ env        = { RUST_LOG = "info" }
 
 ### Composite tasks
 
-A task with `depends_on` and no `command` is composite — it just orchestrates. Useful for `ci`:
+A task with `depends_on` and no `command` is composite: it just orchestrates. Useful for `ci`:
 
 ```toml
 [tasks.ci]
@@ -148,9 +148,9 @@ Three prefixes control what the dependency points at:
 
 | Prefix | Meaning | Example |
 |---|---|---|
-| `"task"` | Run `task` in **this same project** first | `depends_on = ["build"]` — test needs build |
-| `"^task"` | Run `task` in every **upstream dependency project** first | `depends_on = ["^build"]` — build deps before self |
-| `"//task"` | Run `task` across **every project in the workspace** first | `depends_on = ["//lint"]` — lint everything first |
+| `"task"` | Run `task` in **this same project** first | `depends_on = ["build"]` (test needs build) |
+| `"^task"` | Run `task` in every **upstream dependency project** first | `depends_on = ["^build"]` (build deps before self) |
+| `"//task"` | Run `task` across **every project in the workspace** first | `depends_on = ["//lint"]` (lint everything first) |
 
 The pipeline planner:
 
@@ -176,8 +176,8 @@ test  = "anchor test"
 
 Precedence inside a project, from highest to lowest:
 
-1. `[projects.<name>.tasks.<task>]` — explicit project override
-2. `[tasks.<task>]` — workspace-level task
+1. `[projects.<name>.tasks.<task>]` explicit project override
+2. `[tasks.<task>]` workspace-level task
 3. Manifest script (e.g. `package.json` `scripts.<task>`)
 4. Language default (cargo/npm/pytest/go/etc.)
 
@@ -190,13 +190,13 @@ When nothing else matches, kdo falls back to these:
 | Language | `build` | `test` | `lint` | `fmt` |
 |---|---|---|---|---|
 | Rust / Anchor | `cargo build` | `cargo test` | `cargo clippy` | `cargo fmt` |
-| TypeScript / JavaScript | `npm run build`¹ | `npm test`¹ | `npm run lint`¹ | — |
-| Python | — | `python3 -m pytest` | `ruff check .` | `ruff format .` |
+| TypeScript / JavaScript | `npm run build`¹ | `npm test`¹ | `npm run lint`¹ | (none) |
+| Python | (none) | `python3 -m pytest` | `ruff check .` | `ruff format .` |
 | Go | `go build ./...` | `go test ./...` | `golangci-lint run` | `gofmt -w .` |
 
-¹ — auto-detects package manager: `bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, else `npm`. Scripts declared in `package.json` take priority over these defaults.
+¹ Auto-detects package manager: `bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, else `npm`. Scripts declared in `package.json` take priority over these defaults.
 
-## Complete example — multi-language
+## Complete example (multi-language)
 
 ```toml
 [workspace]

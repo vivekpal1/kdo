@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/Docs.astro
 title: MCP server
-description: Seven tools, resource endpoints, and registration for Claude Code, Openclaw, Cursor, Zed, and any MCP-capable agent.
+description: Seven tools, resource endpoints, and registration for Claude Code, OpenClaw, Cursor, Zed, and any MCP-capable agent.
 slug: "mcp"
 ---
 
@@ -14,6 +14,17 @@ kdo serve --transport stdio
 kdo serve --transport stdio --agent claude
 kdo serve --transport stdio --agent openclaw
 ```
+
+Runs in the foreground, reads JSON-RPC messages on stdin, writes responses on stdout. Logs go to stderr. Intended to be started by an MCP client, not directly by a human.
+
+Smoke-test manually:
+
+```bash
+echo '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}},"id":1}' \
+  | kdo serve --transport stdio
+```
+
+You should see a JSON response with `"serverInfo":{"name":"kdo",...}`.
 
 ## Agent profiles
 
@@ -28,8 +39,8 @@ verbosity. `generic` (default) works for anything MCP-spec-compliant.
 | `generic` | 3072 tok | 5 calls | 8 000 tok | no |
 
 **Loop guard.** Every `tools/call` passes through a sliding-window detector.
-N identical `(tool, args)` pairs in a row return an `"loop detected"` error
-instead of silently re-running — OpenClaw's window is 3, Claude and generic
+N identical `(tool, args)` pairs in a row return a `"loop detected"` error
+instead of silently re-running. OpenClaw's window is 3, Claude and generic
 are 5. A second detector catches thrash (many distinct calls in a very short
 window) using profile-tunable thresholds.
 
@@ -37,22 +48,11 @@ window) using profile-tunable thresholds.
 automatically. If you're wiring it manually, pick the profile that matches your
 agent.
 
-Runs in the foreground, reads JSON-RPC messages on stdin, writes responses on stdout. Logs go to stderr. Intended to be started by an MCP client, not directly by a human.
-
-Smoke-test manually:
-
-```bash
-echo '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}},"id":1}' \
-  | kdo serve --transport stdio
-```
-
-You should see a JSON response with `"serverInfo":{"name":"kdo",...}`.
-
 ## Register with an agent
 
 ### Claude Code
 
-**Preferred — one command:**
+**Preferred, one command:**
 
 ```bash
 kdo setup claude --global
@@ -74,13 +74,13 @@ claude mcp list
 # kdo: kdo serve --transport stdio --agent claude - ✓ Connected
 ```
 
-**Status:** tested end-to-end — initialize, `tools/list`, `tools/call` all
+**Status:** tested end-to-end. `initialize`, `tools/list`, `tools/call` all
 round-trip cleanly. Loop guard observed tripping on the 3rd duplicate call
 under the `openclaw` profile.
 
 ### OpenClaw
 
-**Preferred — one command:**
+**Preferred, one command:**
 
 ```bash
 kdo setup openclaw --global
@@ -90,7 +90,7 @@ Writes an AgentSkills-spec `SKILL.md` under `~/.openclaw/skills/kdo/` and
 merges the MCP server into `~/.openclaw/openclaw.json` at
 `/mcpServers/kdo`. Plain JSON, siblings preserved.
 
-Manual equivalent — edit `~/.openclaw/openclaw.json`:
+Manual equivalent - edit `~/.openclaw/openclaw.json`:
 
 ```json
 {
@@ -124,7 +124,7 @@ Add to `.cursor/mcp.json`:
 
 ### Zed, Cline, Continue, any other MCP-capable client
 
-Point them at the same command: `kdo serve --transport stdio`. The specifics vary by client — check their MCP docs for the exact config file.
+Point them at the same command: `kdo serve --transport stdio`. The specifics vary by client; check their MCP docs for the exact config file.
 
 ## Tools
 
@@ -132,7 +132,7 @@ Seven `tools/call` methods. Every tool returns JSON and respects the workspace r
 
 ### `kdo_list_projects`
 
-List every project with a one-line summary. **Start here** — cheap orientation (~200 tokens).
+List every project with a one-line summary. **Start here:** cheap orientation (~200 tokens).
 
 **Input:** none
 **Output:** array of `{ name, path, language, summary, dep_count }`
@@ -155,7 +155,7 @@ Token-budgeted context bundle for one project. Summary + public API signatures +
 
 | Arg | Type | Required | Default |
 |---|---|---|---|
-| `project` | string | yes | — |
+| `project` | string | yes | (none) |
 | `budget` | integer | no | 4096 |
 
 **Output:** markdown string
@@ -183,14 +183,14 @@ Query the dependency graph: either what this project depends on, or what depends
 
 | Arg | Type | Required | Default |
 |---|---|---|---|
-| `project` | string | yes | — |
+| `project` | string | yes | (none) |
 | `direction` | `"deps"` \| `"dependents"` | no | `"deps"` |
 
 **Output:** array of project names.
 
 ### `kdo_affected`
 
-Which projects are affected by changes since a git ref. Uses the workspace dep graph — touching a leaf marks every dependent.
+Which projects are affected by changes since a git ref. Uses the workspace dep graph: touching a leaf marks every dependent.
 
 **Input:**
 
@@ -227,7 +227,7 @@ Execute a task in one project from inside an agent conversation. Resolves the sa
 
 **Output:** `{ exit_code, stdout, stderr }`.
 
-Use with care — the task actually runs.
+Use with care: the task actually runs.
 
 ## Resources
 
@@ -264,12 +264,12 @@ Returns a `contents[]` array with the markdown body.
 
 Order matters for token efficiency:
 
-1. **`kdo_list_projects`** — one call, ~200 tokens. Orients the agent.
-2. **`kdo_get_context`** (or read the resource) — for the specific project the agent is about to change.
-3. **`kdo_dep_graph` / `kdo_affected`** — understand blast radius before editing.
-4. **`kdo_read_symbol`** — only when a specific function body is needed.
-5. **`kdo_search_code`** — for cross-project usage.
-6. **`kdo_run_task`** — to verify a change via test / build / lint.
+1. **`kdo_list_projects`** for orientation. One call, ~200 tokens.
+2. **`kdo_get_context`** (or read the resource) for the specific project the agent is about to change.
+3. **`kdo_dep_graph` / `kdo_affected`** to understand blast radius before editing.
+4. **`kdo_read_symbol`** only when a specific function body is needed.
+5. **`kdo_search_code`** for cross-project usage.
+6. **`kdo_run_task`** to verify a change via test / build / lint.
 
 Following this order typically cuts token consumption 5–10× versus letting the agent walk the filesystem.
 
@@ -294,7 +294,7 @@ Context files are generated once during `kdo init` and cached under `.kdo/contex
 
 - **"Connection failed"** in Claude Code / other clients: run `kdo serve --transport stdio` manually and pipe in the initialize message above. If that works, the client's config is pointing at the wrong binary path.
 - **Empty context / minimal signatures:** make sure source files have public API markers (`pub fn`, `export function`, etc.). Check `.kdoignore` isn't excluding source directories.
-- **Tool not found:** confirm the version — older versions (pre-alpha.3) didn't ship `kdo_run_task` or resources. `kdo --version` should print `0.1.0-alpha.3` or later.
+- **Tool not found:** confirm the version. Older versions didn't ship `kdo_run_task` or resources. `kdo --version` should print `0.2.0-alpha.1` or later.
 
 ## Roadmap
 

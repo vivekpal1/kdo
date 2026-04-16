@@ -6,7 +6,7 @@ const agents = [
     label: "claude code",
     title: "Claude Code",
     description:
-      "One command registers kdo globally, updates CLAUDE.md with the usage block, and seeds shared memory. Verified — MCP handshake + tool calls round-trip.",
+      "One command registers kdo globally, updates CLAUDE.md with the usage block, and seeds shared memory. Verified end to end: MCP handshake + tool calls round-trip.",
     status: "verified",
     docsHref: "https://vivekpal1.github.io/kdo/docs/mcp#claude-code",
     snippets: [
@@ -52,12 +52,13 @@ const statusLabel = (status: string) =>
   <div class="mx-auto max-w-2xl text-center">
     <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">use with your agent</p>
     <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-      One command wires it up.
+      One endpoint. Every agent.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup</code> registers the MCP server,
-      drops in a usage block, seeds shared memory, and tunes the server to the target agent's budget and loop-tolerance.
-      Idempotent — safe to re-run.
+      Install kdo once, register it once. Every MCP-compatible agent you open reads the same workspace intelligence.
+      Claude Code and OpenClaw get tuned profiles; everything else works via
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">--agent generic</code>.
+      Re-running <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup</code> converges to the same state.
     </p>
   </div>
 
@@ -100,7 +101,7 @@ const statusLabel = (status: string) =>
   <div class="mx-auto mt-10 max-w-2xl rounded-2xl border border-line bg-canvas-2/60 px-5 py-4 text-sm text-ink-2">
     <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-tide">other clients</span>
     <p class="mt-2 leading-relaxed text-ink-3">
-      Cursor, Zed, Cline, Continue, and anything else speaking the MCP spec — point them at
+      Cursor, Zed, Cline, Continue, and anything else speaking the MCP spec: point them at
       <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">kdo serve --transport stdio --agent generic</code>.
       No dedicated setup command yet; follow the client's own MCP-server config path.
     </p>
