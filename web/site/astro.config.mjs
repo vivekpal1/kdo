@@ -1,5 +1,6 @@
 import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
+import mdx from "@astrojs/mdx";
 
 // https://astro.build/config
 //
@@ -9,6 +10,13 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   site: "https://vivekpal1.github.io",
   base: "/kdo",
+  integrations: [mdx()],
+  markdown: {
+    shikiConfig: {
+      theme: "github-light",
+      wrap: true,
+    },
+  },
   vite: {
     plugins: [tailwindcss()],
   },

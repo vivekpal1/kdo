@@ -1,0 +1,258 @@
+---
+layout: ../../layouts/Docs.astro
+title: MCP server
+description: Seven tools, resource endpoints, and registration for Claude Code, OpenCode, Cursor, Zed, and any MCP-capable agent.
+slug: "mcp"
+---
+
+kdo ships an MCP server as a first-class command. It speaks JSON-RPC 2.0 over stdio and exposes every workspace query an AI coding agent needs: orientation, context, symbol lookup, dep graph, affected-set, cross-workspace search, and task execution.
+
+## Start the server
+
+```bash
+kdo serve --transport stdio
+```
+
+Runs in the foreground, reads JSON-RPC messages on stdin, writes responses on stdout. Logs go to stderr. Intended to be started by an MCP client, not directly by a human.
+
+Smoke-test manually:
+
+```bash
+echo '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}},"id":1}' \
+  | kdo serve --transport stdio
+```
+
+You should see a JSON response with `"serverInfo":{"name":"kdo",...}`.
+
+## Register with an agent
+
+### Claude Code
+
+```bash
+claude mcp add --scope user kdo -- kdo serve --transport stdio
+```
+
+`--scope user` registers globally — every project gets kdo tools with no per-repo setup. Use `--scope local` (or omit) to register only for the current project.
+
+Verify:
+
+```bash
+claude mcp list
+# kdo: kdo serve --transport stdio - ✓ Connected
+```
+
+### OpenCode
+
+Add to `opencode.json` (workspace root or `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "kdo": {
+      "type": "local",
+      "command": ["kdo", "serve", "--transport", "stdio"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "kdo": {
+      "command": "kdo",
+      "args": ["serve", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+### Zed, Cline, Continue, any other MCP-capable client
+
+Point them at the same command: `kdo serve --transport stdio`. The specifics vary by client — check their MCP docs for the exact config file.
+
+## Tools
+
+Seven `tools/call` methods. Every tool returns JSON and respects the workspace rooted at the CWD where `kdo serve` was started.
+
+### `kdo_list_projects`
+
+List every project with a one-line summary. **Start here** — cheap orientation (~200 tokens).
+
+**Input:** none
+**Output:** array of `{ name, path, language, summary, dep_count }`
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "kdo_list_projects",
+    "arguments": {}
+  }
+}
+```
+
+### `kdo_get_context`
+
+Token-budgeted context bundle for one project. Summary + public API signatures + dependency list, truncated with a visible marker if it would exceed the budget.
+
+**Input:**
+
+| Arg | Type | Required | Default |
+|---|---|---|---|
+| `project` | string | yes | — |
+| `budget` | integer | no | 4096 |
+
+**Output:** markdown string
+
+Typical use: after `kdo_list_projects` tells the agent what exists, this gives it *just enough* to make a change without running out of context.
+
+### `kdo_read_symbol`
+
+Read a specific symbol body (function, struct, trait, class) via tree-sitter. Use when `kdo_get_context` shows only the signature and the agent needs the implementation.
+
+**Input:**
+
+| Arg | Type | Required |
+|---|---|---|
+| `project` | string | yes |
+| `symbol` | string | yes |
+
+**Output:** `{ file, line, body }` or an error if the symbol wasn't found.
+
+### `kdo_dep_graph`
+
+Query the dependency graph: either what this project depends on, or what depends on it.
+
+**Input:**
+
+| Arg | Type | Required | Default |
+|---|---|---|---|
+| `project` | string | yes | — |
+| `direction` | `"deps"` \| `"dependents"` | no | `"deps"` |
+
+**Output:** array of project names.
+
+### `kdo_affected`
+
+Which projects are affected by changes since a git ref. Uses the workspace dep graph — touching a leaf marks every dependent.
+
+**Input:**
+
+| Arg | Type | Required | Default |
+|---|---|---|---|
+| `base_ref` | string | no | `"main"` |
+
+**Output:** array of project names.
+
+Use at the start of a task to scope changes: "what could be broken by this PR?"
+
+### `kdo_search_code`
+
+ripgrep-powered pattern search across every workspace source file. Respects `.gitignore` and `.kdoignore`.
+
+**Input:**
+
+| Arg | Type | Required |
+|---|---|---|
+| `pattern` | string | yes |
+
+**Output:** array of `{ file, line, match }` hits.
+
+### `kdo_run_task`
+
+Execute a task in one project from inside an agent conversation. Resolves the same way as `kdo run` on the CLI.
+
+**Input:**
+
+| Arg | Type | Required |
+|---|---|---|
+| `task` | string | yes |
+| `project` | string | yes |
+
+**Output:** `{ exit_code, stdout, stderr }`.
+
+Use with care — the task actually runs.
+
+## Resources
+
+kdo also exposes pre-generated context files under `.kdo/context/` as MCP resources. Clients that support `resources/list` + `resources/read` can attach them directly without calling `kdo_get_context`.
+
+**URI format:** `kdo://context/<project>`
+
+**`resources/list`:**
+
+```json
+{
+  "resources": [
+    {
+      "uri": "kdo://context/vault-sdk",
+      "name": "vault-sdk context",
+      "description": "Pre-generated context bundle for project `vault-sdk`.",
+      "mimeType": "text/markdown"
+    }
+  ]
+}
+```
+
+**`resources/read`:**
+
+```json
+{
+  "params": { "uri": "kdo://context/vault-sdk" }
+}
+```
+
+Returns a `contents[]` array with the markdown body.
+
+## Recommended agent workflow
+
+Order matters for token efficiency:
+
+1. **`kdo_list_projects`** — one call, ~200 tokens. Orients the agent.
+2. **`kdo_get_context`** (or read the resource) — for the specific project the agent is about to change.
+3. **`kdo_dep_graph` / `kdo_affected`** — understand blast radius before editing.
+4. **`kdo_read_symbol`** — only when a specific function body is needed.
+5. **`kdo_search_code`** — for cross-project usage.
+6. **`kdo_run_task`** — to verify a change via test / build / lint.
+
+Following this order typically cuts token consumption 5–10× versus letting the agent walk the filesystem.
+
+## Protocol version
+
+Advertised protocol version: `2024-11-05`. Capabilities declared in `initialize`:
+
+```json
+{
+  "capabilities": {
+    "tools": {},
+    "resources": { "listChanged": false, "subscribe": false }
+  }
+}
+```
+
+## Keeping the context fresh
+
+Context files are generated once during `kdo init` and cached under `.kdo/context/`. If you make big structural changes, re-run `kdo init` to regenerate. Incremental regeneration (only changed projects) is on the roadmap.
+
+## Troubleshooting
+
+- **"Connection failed"** in Claude Code / other clients: run `kdo serve --transport stdio` manually and pipe in the initialize message above. If that works, the client's config is pointing at the wrong binary path.
+- **Empty context / minimal signatures:** make sure source files have public API markers (`pub fn`, `export function`, etc.). Check `.kdoignore` isn't excluding source directories.
+- **Tool not found:** confirm the version — older versions (pre-alpha.3) didn't ship `kdo_run_task` or resources. `kdo --version` should print `0.1.0-alpha.3` or later.
+
+## Roadmap
+
+Planned but not yet shipped:
+
+- **SSE transport** for remote/multi-agent setups
+- **Streaming context** for oversized projects
+- **Incremental context regeneration** via content hashes
+
+Track status at [TODO.md](https://github.com/vivekpal1/kdo/blob/main/TODO.md).

@@ -1,0 +1,200 @@
+---
+layout: ../../layouts/Docs.astro
+title: CLI commands
+description: Every kdo subcommand, every flag, with copy-pastable examples.
+slug: "cli"
+---
+
+kdo ships as a single binary named `kdo`. Every command works from the workspace root (the directory containing `kdo.toml`). Run `kdo --help` for the short form, or use the sections below.
+
+## Discovery
+
+### `kdo init`
+
+Initialize a workspace. Scaffolds a template on an empty directory, or adopts an existing repo.
+
+```bash
+kdo init
+```
+
+**Side effects:** creates `kdo.toml`, `.kdoignore`, `.kdo/` cache, updates `.gitignore`. Safe to re-run — it won't overwrite an existing `kdo.toml`.
+
+### `kdo new <name>`
+
+Scaffold a new project interactively. Prompts for language, type (lib/bin), and framework.
+
+```bash
+kdo new my-service
+# ? Language: [rust] / typescript / python / anchor / go
+# ? Type:     [library] / binary
+# ? Framework: [none] / react / next  (TypeScript only)
+```
+
+Creates the project dir with a manifest, source stub, tests stub, and regenerates `.kdo/context/`.
+
+### `kdo list`
+
+List every project in the workspace.
+
+```bash
+kdo list
+kdo list --format json    # programmatic consumption
+```
+
+### `kdo graph`
+
+Show the dependency graph.
+
+```bash
+kdo graph                         # indented text
+kdo graph --format json           # for tooling
+kdo graph --format dot | dot -Tsvg > graph.svg
+```
+
+### `kdo doctor`
+
+Validate workspace health. Parses every manifest, checks for circular deps, verifies `.kdo/` is populated, warns about stale context files.
+
+```bash
+kdo doctor
+```
+
+Exit code is non-zero if any **errors** are found (warnings don't fail).
+
+## Context
+
+### `kdo context <project> [--budget N]`
+
+Generate a token-budgeted context bundle for one project.
+
+```bash
+kdo context vault-program --budget 2048
+kdo context vault-sdk --format json
+```
+
+Output includes: one-line summary, public API signatures (extracted via tree-sitter), dependency list. Truncates with a visible marker when the budget is exceeded.
+
+### `kdo source <symbol> [--filter project]`
+
+Look up where a symbol is defined. Grep-based, respects `.gitignore` / `.kdoignore`.
+
+```bash
+kdo source initialize_vault
+kdo source VaultClient --filter vault-sdk
+```
+
+Works across Rust (`fn`, `struct`, `enum`, `trait`), TS/JS (`function`, `class`, `const`, `interface`, `type`), Python (`def`, `class`), Go (`func`, `type`).
+
+### `kdo similar <project> [--limit N]`
+
+Find structurally similar projects. Ranks by Jaccard similarity of dependency sets plus a same-language bonus.
+
+```bash
+kdo similar vault-program
+kdo similar vault-sdk --limit 3 --format json
+```
+
+## Execution
+
+### `kdo run <task> [--filter P] [--parallel] [--dry-run] [-- args]`
+
+Run a named task. Aliases resolve first. `depends_on` expands into a linear plan, then executes.
+
+```bash
+kdo run build                      # topological order, all projects
+kdo run test --filter vault-sdk    # one project
+kdo run ci --parallel              # independent stages concurrent
+kdo run build --dry-run            # print the plan, don't execute
+kdo run build -- --release         # pass-through args after --
+kdo run b                          # if [aliases] has b = "build"
+```
+
+**Flags:**
+
+| Flag | What it does |
+|---|---|
+| `--filter <name>` | Only run in projects whose name contains `<name>` |
+| `--parallel` | Run independent projects concurrently (rayon) |
+| `--dry-run` | Print the resolved plan with env and persistent markers |
+| `-- <args>` | Everything after `--` is appended to each resolved command |
+
+See [kdo.toml schema](./config) for how task resolution works.
+
+### `kdo exec <command> [--filter P] [--parallel]`
+
+Run an arbitrary shell command in each project directory.
+
+```bash
+kdo exec "ls src"
+kdo exec "wc -l **/*.rs" --filter vault-program
+kdo exec "git status" --parallel
+```
+
+### `kdo affected [--base ref]`
+
+List projects affected by changes since a git ref. Uses the dependency graph — changing a leaf marks every dependent as affected.
+
+```bash
+kdo affected                    # since main
+kdo affected --base HEAD~5
+kdo affected --base origin/main --format json
+```
+
+Pair with `kdo run test --filter "$(kdo affected --format json | jq -r '.[].name' | head -1)"` for CI.
+
+## MCP
+
+### `kdo serve [--transport stdio]`
+
+Run the MCP server. Exposes seven tools and a `resources/list` endpoint.
+
+```bash
+kdo serve --transport stdio
+```
+
+For agent setup, see [MCP server](./mcp).
+
+## Meta
+
+### `kdo completions <shell>`
+
+Generate shell completions.
+
+```bash
+kdo completions zsh > ~/.zsh/completions/_kdo
+kdo completions bash > /etc/bash_completion.d/kdo
+kdo completions fish > ~/.config/fish/completions/kdo.fish
+kdo completions powershell > kdo.ps1
+```
+
+### `kdo upgrade [--version X] [--dry-run]`
+
+Self-update. Downloads the latest release binary from GitHub and replaces the running binary atomically (backup-then-rename, auto-rollback on failure).
+
+```bash
+kdo upgrade                    # latest release
+kdo upgrade --version 0.1.0-alpha.4
+kdo upgrade --dry-run          # show what would happen
+```
+
+Only supported platforms get prebuilt binaries (x86_64/aarch64 linux, x86_64/aarch64 darwin). For unsupported platforms, use `cargo install kdo --version X`.
+
+## Environment
+
+kdo reads:
+
+- `RUST_LOG` — standard `tracing` filter. `RUST_LOG=debug kdo init` is the first thing to try when discovery misbehaves.
+- `NO_COLOR` — set to disable ANSI colors in output.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Generic error (check stderr) |
+| 2 | Task(s) failed (from `kdo run` / `kdo exec`) |
+| 101 | Rust panic — please file a bug |
+
+## Global flags
+
+Not currently standardized. `--help` works on every subcommand; `--version` on the root binary. More global flags (like `--color`, `--cwd`) are tracked in the roadmap.

@@ -23,19 +23,19 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
     <div class="flex items-center gap-1 sm:gap-2">
       <a
+        href={`${base}/docs`}
+        class="hidden rounded-full px-3 py-1.5 text-sm text-ink-2 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:inline-block"
+      >
+        Docs
+      </a>
+      <a
         href="https://github.com/vivekpal1/kdo"
         class="hidden rounded-full px-3 py-1.5 text-sm text-ink-2 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:inline-block"
       >
         GitHub
       </a>
       <a
-        href="https://crates.io/crates/kdo"
-        class="hidden rounded-full px-3 py-1.5 text-sm text-ink-2 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:inline-block"
-      >
-        crates.io
-      </a>
-      <a
-        href="#install"
+        href={`${base}/#install`}
         class="rounded-full bg-ink px-3.5 py-1.5 text-sm font-medium text-canvas transition-transform duration-100 ease-out hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide sm:px-4"
       >
         Install

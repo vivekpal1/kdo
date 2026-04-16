@@ -1,0 +1,268 @@
+---
+layout: ../../layouts/Docs.astro
+title: kdo.toml schema
+description: The workspace configuration format. Tasks with depends_on, env merging, aliases, per-project overrides, and project globs.
+slug: "config"
+---
+
+`kdo.toml` lives at your workspace root and is committed to git. It's the single source of truth for workspace identity, task pipelines, environment, and per-project overrides.
+
+The full schema is optional — an empty `[workspace]` section works. Tasks can be bare command strings or full pipeline specs; mix and match.
+
+## Quickstart example
+
+```toml
+[workspace]
+name = "my-monorepo"
+projects = ["apps/*", "crates/*"]
+exclude  = ["legacy/**"]
+
+[aliases]
+b = "build"
+t = "test"
+
+[env]
+RUST_BACKTRACE = "1"
+env_files = [".env", ".env.local"]
+
+[tasks]
+lint = "cargo clippy --all-targets -- -D warnings"
+
+[tasks.build]
+command    = "cargo build"
+depends_on = ["^build"]
+inputs     = ["src/**", "Cargo.toml"]
+outputs    = ["target/debug/"]
+cache      = true
+
+[tasks.test]
+command    = "cargo test"
+depends_on = ["build"]
+
+[tasks.ci]
+depends_on = ["lint", "test"]
+
+[projects.vault-program]
+env = { ANCHOR_PROVIDER_URL = "http://localhost:8899" }
+
+[projects.vault-program.tasks]
+build = "anchor build"
+test  = "anchor test"
+```
+
+## `[workspace]`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `name` | string | dir basename | Human-readable workspace name (surfaced in `kdo list` and MCP). |
+| `projects` | string[] | `[]` | Glob patterns restricting discovery. Empty = scan everything. |
+| `exclude` | string[] | `[]` | Glob patterns removed from discovery after `projects` filtering. |
+
+Globs use `/` as a literal separator — `packages/*` matches direct children only. Use `packages/**` for recursive.
+
+If `pnpm-workspace.yaml` is present at the root, its `packages:` list merges with `[workspace].projects` (and `!`-prefixed entries merge into `exclude`). You get pnpm workspace support for free.
+
+## `[aliases]`
+
+Short names that resolve to real task names.
+
+```toml
+[aliases]
+b = "build"
+t = "test"
+l = "lint"
+```
+
+`kdo run b` behaves exactly like `kdo run build`. Aliases resolve once, before anything else, and only apply to the invoked task — not to `depends_on` entries (which must use real task names).
+
+## `[env]`
+
+Workspace-wide environment variables, merged into every task invocation.
+
+```toml
+[env]
+RUST_BACKTRACE = "1"
+NODE_ENV = "development"
+env_files = [".env", ".env.local"]
+```
+
+`env_files` is an array of paths to `.env`-style files. They're loaded first, then `[env]` keys override. The **final merge order** applied to a running task:
+
+1. Process env (`kdo`'s own environment)
+2. Files listed in `env_files`
+3. `[env]` keys from `kdo.toml`
+4. `[projects.<name>.env]` (if a project override is matched)
+5. Task-level `env` inside a `[tasks.<name>]` table
+
+Later layers win. Inspect the resolved environment for any task with `kdo run <task> --dry-run`.
+
+## `[tasks]`
+
+### Bare form — string command
+
+```toml
+[tasks]
+lint = "cargo clippy"
+fmt  = "cargo fmt --all"
+```
+
+Equivalent to a full spec with only `command` set.
+
+### Full form — pipeline spec
+
+```toml
+[tasks.build]
+command    = "cargo build"
+depends_on = ["^build"]
+inputs     = ["src/**", "Cargo.toml"]
+outputs    = ["target/debug/"]
+cache      = true
+persistent = false
+env        = { RUST_LOG = "info" }
+```
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `command` | string | — | Shell command run via `sh -c`. Optional if the task is purely composite (only `depends_on`). |
+| `depends_on` | string[] | `[]` | Tasks to run before this one. See semantics below. |
+| `inputs` | string[] | `[]` | Glob patterns contributing to the cache key. Reserved for the upcoming cache backend. |
+| `outputs` | string[] | `[]` | Paths this task produces. Reserved for the cache backend. |
+| `cache` | bool | `true` | Whether the task is cacheable. Set `false` for side-effecting tasks. |
+| `persistent` | bool | `false` | Long-running (dev server, watcher). Failure doesn't block downstream tasks. |
+| `env` | table | `{}` | Task-specific env, merged last. |
+
+### Composite tasks
+
+A task with `depends_on` and no `command` is composite — it just orchestrates. Useful for `ci`:
+
+```toml
+[tasks.ci]
+depends_on = ["lint", "test", "build"]
+```
+
+`kdo run ci` expands to all three, dedupes, and runs them in correct order.
+
+## `depends_on` semantics
+
+Three prefixes control what the dependency points at:
+
+| Prefix | Meaning | Example |
+|---|---|---|
+| `"task"` | Run `task` in **this same project** first | `depends_on = ["build"]` — test needs build |
+| `"^task"` | Run `task` in every **upstream dependency project** first | `depends_on = ["^build"]` — build deps before self |
+| `"//task"` | Run `task` across **every project in the workspace** first | `depends_on = ["//lint"]` — lint everything first |
+
+The pipeline planner:
+
+1. Starts from the invoked task for each target project.
+2. Recursively expands `depends_on`, deduplicating `(project, task)` pairs.
+3. Emits a linear plan in dependency-correct order.
+4. Executes sequentially, or in parallel with `--parallel`.
+
+Use `--dry-run` to see the exact plan before executing.
+
+## `[projects.<name>]`
+
+Per-project overrides. Keyed by the project's `name` (as shown in `kdo list`, not its path).
+
+```toml
+[projects.vault-program]
+env = { ANCHOR_PROVIDER_URL = "http://localhost:8899" }
+
+[projects.vault-program.tasks]
+build = "anchor build"
+test  = "anchor test"
+```
+
+Precedence inside a project, from highest to lowest:
+
+1. `[projects.<name>.tasks.<task>]` — explicit project override
+2. `[tasks.<task>]` — workspace-level task
+3. Manifest script (e.g. `package.json` `scripts.<task>`)
+4. Language default (cargo/npm/pytest/go/etc.)
+
+If none match, `kdo run` skips the project for that task (and warns if no project at all defined the task).
+
+## Language defaults
+
+When nothing else matches, kdo falls back to these:
+
+| Language | `build` | `test` | `lint` | `fmt` |
+|---|---|---|---|---|
+| Rust / Anchor | `cargo build` | `cargo test` | `cargo clippy` | `cargo fmt` |
+| TypeScript / JavaScript | `npm run build`¹ | `npm test`¹ | `npm run lint`¹ | — |
+| Python | — | `python3 -m pytest` | `ruff check .` | `ruff format .` |
+| Go | `go build ./...` | `go test ./...` | `golangci-lint run` | `gofmt -w .` |
+
+¹ — auto-detects package manager: `bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, else `npm`. Scripts declared in `package.json` take priority over these defaults.
+
+## Complete example — multi-language
+
+```toml
+[workspace]
+name = "acme-platform"
+projects = ["apps/*", "services/*", "packages/*"]
+exclude  = ["apps/legacy/**"]
+
+[aliases]
+b = "build"
+t = "test"
+d = "dev"
+
+[env]
+env_files = [".env", ".env.local"]
+
+[env]
+LOG_LEVEL = "info"
+
+# Workspace-level tasks apply everywhere unless overridden.
+[tasks.fmt]
+command = "echo 'configured per-project'"
+
+[tasks.build]
+command    = "echo 'configured per-project'"
+depends_on = ["^build"]
+
+[tasks.test]
+command    = "echo 'configured per-project'"
+depends_on = ["build"]
+
+[tasks.ci]
+depends_on = ["fmt", "build", "test"]
+
+# Rust service
+[projects.api.tasks]
+build = "cargo build --release"
+test  = "cargo nextest run"
+fmt   = "cargo fmt --all"
+
+# Next.js app
+[projects.web.tasks]
+build = "pnpm build"
+test  = "pnpm test"
+dev   = "pnpm dev"
+
+[projects.web]
+env = { NEXT_PUBLIC_API = "http://localhost:8080" }
+
+# Long-running dev process
+[projects.web.tasks.dev]
+command    = "pnpm dev"
+persistent = true
+
+# Python package
+[projects.billing.tasks]
+build = "python -m build"
+test  = "python -m pytest"
+fmt   = "ruff format ."
+```
+
+## Validation
+
+Use `kdo doctor` to check your config:
+
+```bash
+kdo doctor
+```
+
+It catches malformed TOML, circular task dependencies, missing task commands in composite chains, and orphaned `[projects.<name>]` sections (where `<name>` doesn't match any discovered project).

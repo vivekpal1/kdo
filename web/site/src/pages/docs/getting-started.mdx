@@ -1,0 +1,160 @@
+---
+layout: ../../layouts/Docs.astro
+title: Getting started
+description: Install kdo, initialize a workspace, run your first task, and register kdo with your AI agent.
+slug: "getting-started"
+---
+
+A 5-minute path from zero to a running kdo workspace with MCP wired into Claude Code or OpenCode.
+
+## 1. Install
+
+Pick one. All three leave you with a `kdo` binary on your PATH.
+
+**Prebuilt binary** (fastest, no Rust toolchain):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bash -s -- --from-release
+```
+
+**From crates.io** (requires an explicit version during alpha):
+
+```bash
+cargo install kdo --version "0.1.0-alpha.3"
+```
+
+**From source** (for contributors):
+
+```bash
+git clone https://github.com/vivekpal1/kdo
+cd kdo
+make install          # → ~/.local/bin/kdo
+```
+
+Verify:
+
+```bash
+kdo --version
+# kdo 0.1.0-alpha.3
+```
+
+## 2. Initialize a workspace
+
+Inside any directory:
+
+```bash
+kdo init
+```
+
+**On an empty directory:** scaffolds a `kdo.toml`, a `.kdo/` cache dir, a `.kdoignore`, and updates `.gitignore`. Tells you to run `kdo new <name>` for your first project.
+
+**On an existing repo:** discovers every project by scanning manifests, builds the dependency graph, generates context into `.kdo/context/`, and writes a `kdo.toml` with detected tasks.
+
+What shows up:
+
+| File / dir | Purpose | Commit it? |
+|---|---|---|
+| `kdo.toml` | Workspace config + tasks | Yes |
+| `.kdoignore` | Context exclusion rules | Yes |
+| `.kdo/` | Cache (context, graph snapshot) | No — gitignored |
+| `.kdo/context/*.md` | Per-project AI context | No |
+
+## 3. Explore the workspace
+
+```bash
+kdo list              # table of every project
+kdo graph             # dependency edges
+kdo graph --format dot | dot -Tsvg > graph.svg
+kdo context vault-sdk --budget 2048
+```
+
+Each of these is instant — everything is cached from `kdo init`.
+
+## 4. Run a task
+
+kdo resolves tasks in this order:
+
+1. `[projects.<name>.tasks]` in `kdo.toml` (per-project override)
+2. `[tasks]` in `kdo.toml` (workspace-level)
+3. Project manifest scripts (e.g. `package.json` scripts)
+4. Language defaults (e.g. `cargo build` for Rust)
+
+```bash
+kdo run build                   # topological order across all projects
+kdo run test --filter vault-sdk # one project only
+kdo run ci --parallel           # independent projects run concurrently
+kdo run build --dry-run         # show the plan, don't execute
+kdo run build -- --release      # pass args through to the underlying command
+```
+
+## 5. Wire kdo into your agent
+
+### Claude Code
+
+```bash
+claude mcp add --scope user kdo -- kdo serve --transport stdio
+```
+
+Registered globally. Every new project gets the kdo tools with no per-repo setup.
+
+Verify:
+
+```bash
+claude mcp list
+# kdo: kdo serve --transport stdio - ✓ Connected
+```
+
+### OpenCode
+
+Add to `opencode.json` (workspace root or `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "kdo": {
+      "type": "local",
+      "command": ["kdo", "serve", "--transport", "stdio"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Any other MCP client
+
+Point it at:
+
+```bash
+kdo serve --transport stdio
+```
+
+The server exposes 7 tools and a `resources/list` endpoint for the context files. Full catalog in [MCP server](./mcp).
+
+## 6. Keep it fresh
+
+- **When you add a project** — run `kdo init` again to regenerate context.
+- **When you upgrade** — `kdo upgrade` pulls the latest release binary with an atomic replace.
+- **When something breaks** — `kdo doctor` walks the workspace and reports the first missing piece.
+
+## Recommended first project
+
+If you just want to try it without touching real code, clone the sample monorepo and run every command against it:
+
+```bash
+git clone --depth 1 https://github.com/vivekpal1/kdo
+cd kdo/fixtures/sample-monorepo
+kdo init
+kdo list
+kdo graph
+kdo context vault-program --budget 4096
+kdo run build --dry-run
+```
+
+The fixture mixes Anchor, Rust, TypeScript, and Python so every discovery and extraction path gets exercised.
+
+## Next
+
+- [CLI reference](./cli) — every command, flag, and example
+- [kdo.toml schema](./config) — aliases, env, task pipelines, per-project overrides
+- [MCP server](./mcp) — the seven tools in detail

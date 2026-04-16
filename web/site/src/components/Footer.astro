@@ -1,6 +1,7 @@
 ---
 // Wonder-style dark footer. The brand moment is a single oversized "KDOW" wordmark
 // that bleeds off the bottom — repo name as a sign-off.
+const base = import.meta.env.BASE_URL.replace(/\/$/, "") || "";
 ---
 
 <footer class="relative mt-32 overflow-hidden bg-deep text-canvas">
@@ -33,9 +34,10 @@
       <nav aria-label="Docs">
         <h3 class="font-mono text-[11px] uppercase tracking-[0.18em] text-canvas/40">Docs</h3>
         <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo#install">Install</a></li>
-          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/tree/main/skills/kdo">Agent skill</a></li>
-          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href="https://github.com/vivekpal1/kdo/tree/main/fixtures/sample-monorepo">Sample monorepo</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href={`${base}/docs/getting-started`}>Getting started</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href={`${base}/docs/cli`}>CLI reference</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href={`${base}/docs/config`}>kdo.toml schema</a></li>
+          <li><a class="text-canvas/80 transition-colors duration-100 ease-out hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide-soft" href={`${base}/docs/mcp`}>MCP server</a></li>
         </ul>
       </nav>
 

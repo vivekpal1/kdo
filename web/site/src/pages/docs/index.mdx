@@ -1,0 +1,43 @@
+---
+layout: ../../layouts/Docs.astro
+title: Introduction
+description: kdo is a context-native workspace manager. One binary, one dependency graph, one MCP server, one pipeline runner.
+slug: ""
+---
+
+kdo is a **workspace manager for the agent era**. It scans a polyglot monorepo, builds a dependency graph, generates token-budgeted context for AI agents, runs tasks across projects, and serves the whole thing over MCP.
+
+Think turbo/moon/nx — but it speaks Rust, TypeScript, Python, Go, and Anchor, and ships with a built-in MCP server so coding agents stop walking the filesystem blindly.
+
+## What kdo does
+
+- **Discovers projects** across mixed-language monorepos. One parser per manifest type (Cargo.toml, package.json, pyproject.toml, Anchor.toml, go.mod), one graph, one cache.
+- **Generates context** — token-budgeted summaries + public API signatures extracted via tree-sitter. Per-project markdown files an AI agent can read in seconds.
+- **Runs tasks** with `depends_on`, env merging, per-project overrides, pass-through args. Topological order across languages, parallel within stages.
+- **Serves MCP** — seven tools (`kdo_list_projects`, `kdo_get_context`, `kdo_read_symbol`, `kdo_dep_graph`, `kdo_affected`, `kdo_search_code`, `kdo_run_task`) plus `resources/list` for cached context files. One `kdo serve` and Claude Code, Cursor, OpenCode, Zed, and Cline all work.
+
+## What kdo is not
+
+- **Not a package manager.** It doesn't install dependencies, manage lockfiles, or resolve semver. Use bun/pnpm/cargo/pip for that. kdo is a layer on top.
+- **Not production-ready.** `0.1.0-alpha.3` shipped two days ago. API will break before `0.1.0` stable. Use it for side projects, AI-heavy dev loops, and polyglot monorepos where you've accepted early-adopter risk.
+
+## Fair comparison
+
+| | kdo | turbo | nx | bun | pnpm |
+|---|---|---|---|---|---|
+| Polyglot graph | ● | ○ | ◐ | ○ | ○ |
+| MCP built-in | ● | ○ | ○ | ○ | ○ |
+| Token-budgeted context | ● | ○ | ○ | ○ | ○ |
+| Task pipelines | ● | ◐ | ● | ○ | ○ |
+| Per-project overrides | ● | ● | ● | ○ | ○ |
+| Single static binary | ● | ○ | ○ | ● | ○ |
+| Package install / lockfile | ○ | ○ | ○ | ● | ● |
+
+`●` full · `◐` partial · `○` not supported
+
+## Next steps
+
+- [Getting started](./getting-started) — install, `kdo init`, first run
+- [CLI reference](./cli) — every command with flags
+- [kdo.toml schema](./config) — the config format
+- [MCP server](./mcp) — tools, resources, and how to register with agents
