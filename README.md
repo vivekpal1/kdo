@@ -1,6 +1,6 @@
 # kdo
 
-**Workspace manager for the agent era. Cuts Claude Code token consumption 5-10x on polyglot monorepos.**
+**Workspace manager for the agent era. Cuts Claude Code token consumption 2x on polyglot monorepos.**
 
 kdo scans your workspace, builds a dependency graph, and serves structured context via MCP instead of letting agents traverse the filesystem blindly. Current tools (Turbo, Nx, Moon, Bun) burn 60-80% of agent tokens on navigation. kdo fixes this.
 
