@@ -11,7 +11,31 @@ kdo ships an MCP server as a first-class command. It speaks JSON-RPC 2.0 over st
 
 ```bash
 kdo serve --transport stdio
+kdo serve --transport stdio --agent claude
+kdo serve --transport stdio --agent openclaw
 ```
+
+## Agent profiles
+
+The `--agent` flag tunes the server to the target agent's characteristics.
+Each profile shifts token budgets, loop-detection thresholds, and tool-description
+verbosity. `generic` (default) works for anything MCP-spec-compliant.
+
+| Profile | Default context budget | Loop window | Max tool output | Short descriptions |
+|---|---|---|---|---|
+| `claude` | 4096 tok | 5 calls | 10 000 tok | no |
+| `openclaw` | 2048 tok | 3 calls | 4 000 tok | yes |
+| `generic` | 3072 tok | 5 calls | 8 000 tok | no |
+
+**Loop guard.** Every `tools/call` passes through a sliding-window detector.
+N identical `(tool, args)` pairs in a row return an `"loop detected"` error
+instead of silently re-running — OpenClaw's window is 3, Claude and generic
+are 5. A second detector catches thrash (many distinct calls in a very short
+window) using profile-tunable thresholds.
+
+`kdo setup <agent>` writes the correct `--agent` flag into the client config
+automatically. If you're wiring it manually, pick the profile that matches your
+agent.
 
 Runs in the foreground, reads JSON-RPC messages on stdin, writes responses on stdout. Logs go to stderr. Intended to be started by an MCP client, not directly by a human.
 
@@ -28,35 +52,60 @@ You should see a JSON response with `"serverInfo":{"name":"kdo",...}`.
 
 ### Claude Code
 
+**Preferred — one command:**
+
 ```bash
-claude mcp add --scope user kdo -- kdo serve --transport stdio
+kdo setup claude --global
 ```
 
-`--scope user` registers globally — every project gets kdo tools with no per-repo setup. Use `--scope local` (or omit) to register only for the current project.
+Shells out to `claude mcp add --scope user`, updates `~/.claude/CLAUDE.md`,
+seeds shared agent memory. Idempotent.
+
+Manual equivalent:
+
+```bash
+claude mcp add --scope user kdo -- kdo serve --transport stdio --agent claude
+```
 
 Verify:
 
 ```bash
 claude mcp list
-# kdo: kdo serve --transport stdio - ✓ Connected
+# kdo: kdo serve --transport stdio --agent claude - ✓ Connected
 ```
 
-### Openclaw
+**Status:** tested end-to-end — initialize, `tools/list`, `tools/call` all
+round-trip cleanly. Loop guard observed tripping on the 3rd duplicate call
+under the `openclaw` profile.
 
-Add to `Openclaw.json` (workspace root or `~/.config/Openclaw/Openclaw.json`):
+### OpenClaw
+
+**Preferred — one command:**
+
+```bash
+kdo setup openclaw --global
+```
+
+Writes an AgentSkills-spec `SKILL.md` under `~/.openclaw/skills/kdo/` and
+merges the MCP server into `~/.openclaw/openclaw.json` at
+`/mcpServers/kdo`. Plain JSON, siblings preserved.
+
+Manual equivalent — edit `~/.openclaw/openclaw.json`:
 
 ```json
 {
-  "$schema": "https://Openclaw.ai/config.json",
-  "mcp": {
+  "mcpServers": {
     "kdo": {
-      "type": "local",
-      "command": ["kdo", "serve", "--transport", "stdio"],
-      "enabled": true
+      "command": "kdo",
+      "args": ["serve", "--transport", "stdio", "--agent", "openclaw"]
     }
   }
 }
 ```
+
+**Status:** MCP server is spec-compliant and the registration schema matches
+OpenClaw's documented format, but end-to-end verification against a live
+OpenClaw gateway is still pending.
 
 ### Cursor
 

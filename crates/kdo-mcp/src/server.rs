@@ -1,378 +1,250 @@
-//! MCP server implementation using raw JSON-RPC 2.0 over stdio.
+//! MCP server for kdo — built on the rmcp 0.16 tool-router + ServerHandler
+//! pattern.
 //!
-//! Protocol: <https://modelcontextprotocol.io/specification/2025-11-25>
+//! - Seven tools (`kdo_list_projects`, `kdo_get_context`, `kdo_read_symbol`,
+//!   `kdo_dep_graph`, `kdo_affected`, `kdo_search_code`, `kdo_run_task`) all
+//!   registered via `#[tool_router]` + `#[tool]`.
+//! - Resources endpoint exposes `.kdo/context/<project>.md` as
+//!   `kdo://context/<project>` URIs.
+//! - Every `call_tool` is gated by a [`LoopGuard`] keyed to the active
+//!   [`AgentProfile`]'s window — duplicate calls surface as structured errors
+//!   instead of silently burning tokens.
+//!
+//! Transport: stdio only for now. SSE is on the roadmap.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use rmcp::{
+    handler::server::{router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters},
+    model::{
+        AnnotateAble, CallToolRequestParams, CallToolResult, Content, Implementation,
+        ListResourcesResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion, RawResource,
+        ReadResourceRequestParams, ReadResourceResult, Resource, ResourceContents,
+        ServerCapabilities, ServerInfo,
+    },
+    schemars,
+    service::RequestContext,
+    ErrorData as McpError, ServerHandler, ServiceExt,
+};
+use serde::Deserialize;
+use tokio::sync::Mutex;
+use tracing::debug;
 
 use kdo_context::ContextGenerator;
 use kdo_graph::WorkspaceGraph;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
-use std::sync::Arc;
-use tracing::{debug, error};
 
-// Pull in task resolution from kdo-resolver's language defaults.
-// We re-implement a minimal version here to avoid a circular dep on kdo-cli.
-fn resolve_default_task(language: &kdo_core::Language, task_name: &str) -> Option<String> {
-    match language {
-        kdo_core::Language::Rust | kdo_core::Language::Anchor => match task_name {
-            "build" => Some("cargo build".into()),
-            "test" => Some("cargo test".into()),
-            "lint" => Some("cargo clippy".into()),
-            "fmt" => Some("cargo fmt".into()),
-            _ => None,
-        },
-        kdo_core::Language::TypeScript | kdo_core::Language::JavaScript => match task_name {
-            "build" => Some("npm run build".into()),
-            "test" => Some("npm test".into()),
-            "lint" => Some("npm run lint".into()),
-            _ => None,
-        },
-        kdo_core::Language::Python => match task_name {
-            "test" => Some("python3 -m pytest".into()),
-            "lint" => Some("ruff check .".into()),
-            _ => None,
-        },
-        kdo_core::Language::Go => match task_name {
-            "build" => Some("go build ./...".into()),
-            "test" => Some("go test ./...".into()),
-            "lint" => Some("golangci-lint run".into()),
-            _ => None,
-        },
-    }
+use crate::guards::LoopGuard;
+use crate::profile::AgentProfile;
+
+// ─────────────────────────── Input schemas ───────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetContextArgs {
+    /// Project name (as shown by `kdo_list_projects`).
+    pub project: String,
+    /// Token budget. Defaults to the agent profile's preferred budget.
+    #[serde(default)]
+    pub budget: Option<usize>,
 }
 
-/// Tool definition for MCP tools/list response.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ToolDef {
-    name: String,
-    description: String,
-    input_schema: Value,
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ReadSymbolArgs {
+    /// Project containing the symbol.
+    pub project: String,
+    /// Symbol name (function, struct, trait, class, type).
+    pub symbol: String,
 }
 
-/// MCP server state.
-struct McpServer {
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DepGraphArgs {
+    /// Project to query.
+    pub project: String,
+    /// "deps" (what this project depends on) or "dependents" (what depends on it).
+    #[serde(default)]
+    pub direction: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AffectedArgs {
+    /// Git base ref. Defaults to "main".
+    #[serde(default)]
+    pub base_ref: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SearchCodeArgs {
+    /// Substring pattern to search for.
+    pub pattern: String,
+    /// Limit search to this project (optional).
+    #[serde(default)]
+    pub project: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RunTaskArgs {
+    /// Task name: build, test, lint, fmt, check, clean.
+    pub task: String,
+    /// Project to run the task in.
+    pub project: String,
+}
+
+// ─────────────────────────── Server ───────────────────────────
+
+/// kdo's MCP server state.
+#[derive(Clone)]
+pub struct KdoServer {
     graph: Arc<WorkspaceGraph>,
     ctx_gen: Arc<ContextGenerator>,
-    root: PathBuf,
+    root: Arc<PathBuf>,
+    profile: AgentProfile,
+    loop_guard: Arc<Mutex<LoopGuard>>,
+    tool_router: ToolRouter<Self>,
 }
 
-impl McpServer {
-    fn new(graph: WorkspaceGraph, ctx_gen: ContextGenerator, root: PathBuf) -> Self {
+impl KdoServer {
+    pub fn new(
+        graph: WorkspaceGraph,
+        ctx_gen: ContextGenerator,
+        root: PathBuf,
+        profile: AgentProfile,
+    ) -> Self {
+        let loop_guard = LoopGuard::for_profile_window(profile.loop_detection_window());
         Self {
             graph: Arc::new(graph),
             ctx_gen: Arc::new(ctx_gen),
-            root,
+            root: Arc::new(root),
+            profile,
+            loop_guard: Arc::new(Mutex::new(loop_guard)),
+            tool_router: Self::tool_router(),
         }
     }
 
-    /// Handle a JSON-RPC request and return a response.
-    fn handle_request(&self, method: &str, params: &Value, id: &Value) -> Value {
-        let result = match method {
-            "initialize" => self.handle_initialize(),
-            "tools/list" => self.handle_tools_list(),
-            "tools/call" => self.handle_tools_call(params),
-            "resources/list" => self.handle_resources_list(),
-            "resources/read" => self.handle_resources_read(params),
-            "ping" => Ok(serde_json::json!({})),
-            _ => Err(jsonrpc_error(
-                -32601,
-                &format!("method not found: {method}"),
-            )),
-        };
-
-        match result {
-            Ok(result) => serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": result,
-            }),
-            Err(err) => serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": err,
-            }),
+    /// Truncate a tool response to the profile's `max_tool_output_tokens` by
+    /// (very rough) character-to-token estimation: 4 chars ≈ 1 token.
+    fn cap_output(&self, mut text: String) -> String {
+        let max_chars = self.profile.max_tool_output_tokens().saturating_mul(4);
+        if text.len() > max_chars {
+            text.truncate(max_chars);
+            text.push_str("\n\n[truncated by kdo — response exceeded agent profile budget]");
         }
+        text
     }
 
-    fn handle_initialize(&self) -> Result<Value, Value> {
-        Ok(serde_json::json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {
-                "tools": {},
-                "resources": { "listChanged": false, "subscribe": false }
-            },
-            "serverInfo": {
-                "name": "kdo",
-                "version": env!("CARGO_PKG_VERSION")
-            },
-            "instructions": "Context-native workspace manager. Use kdo_list_projects first to orient, then kdo_get_context for a specific project within a token budget. Use kdo_read_symbol only when you need a specific function body. Pre-generated context files are also available as resources (kdo://context/<project>)."
-        }))
+    /// Map any error-like into a structured MCP tool-call error.
+    fn params_err<E: std::fmt::Display>(err: E) -> McpError {
+        McpError::invalid_params(err.to_string(), None)
     }
 
-    /// List all available resources — one per cached context file under `.kdo/context/`.
-    fn handle_resources_list(&self) -> Result<Value, Value> {
-        let context_dir = self.root.join(".kdo").join("context");
-        let mut resources = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(&context_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                    continue;
-                }
-                let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-                    continue;
-                };
-                resources.push(serde_json::json!({
-                    "uri": format!("kdo://context/{stem}"),
-                    "name": format!("{stem} context"),
-                    "description": format!("Pre-generated context bundle for project `{stem}`."),
-                    "mimeType": "text/markdown",
-                }));
-            }
-        }
-        Ok(serde_json::json!({ "resources": resources }))
+    fn internal_err<E: std::fmt::Display>(err: E) -> McpError {
+        McpError::internal_error(err.to_string(), None)
     }
+}
 
-    /// Read a single resource by URI. Only `kdo://context/<project>` is supported.
-    fn handle_resources_read(&self, params: &Value) -> Result<Value, Value> {
-        let uri = params
-            .get("uri")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing uri"))?;
+// ─────────────────────────── Tools ───────────────────────────
 
-        let project = uri
-            .strip_prefix("kdo://context/")
-            .ok_or_else(|| jsonrpc_error(-32602, &format!("unsupported uri: {uri}")))?;
-
-        // Defense-in-depth: reject path traversal / absolute paths.
-        if project.is_empty() || project.contains('/') || project.contains("..") {
-            return Err(jsonrpc_error(-32602, "invalid project name"));
-        }
-
-        let path = self
-            .root
-            .join(".kdo")
-            .join("context")
-            .join(format!("{project}.md"));
-        let content = std::fs::read_to_string(&path).map_err(|e| {
-            jsonrpc_error(-32000, &format!("failed to read {}: {e}", path.display()))
-        })?;
-
-        Ok(serde_json::json!({
-            "contents": [{
-                "uri": uri,
-                "mimeType": "text/markdown",
-                "text": content,
-            }]
-        }))
-    }
-
-    fn handle_tools_list(&self) -> Result<Value, Value> {
-        let tools = vec![
-            ToolDef {
-                name: "kdo_list_projects".into(),
-                description:
-                    "List all projects in the workspace with summaries (~200 tokens total).".into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }),
-            },
-            ToolDef {
-                name: "kdo_get_context".into(),
-                description:
-                    "Get agent-optimized context bundle for a project within a token budget.".into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "project": { "type": "string", "description": "Project name" },
-                        "budget": { "type": "integer", "description": "Token budget (default 4096)" }
-                    },
-                    "required": ["project"]
-                }),
-            },
-            ToolDef {
-                name: "kdo_read_symbol".into(),
-                description: "Read a specific symbol (function/struct/trait) body via tree-sitter."
-                    .into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "project": { "type": "string", "description": "Project name" },
-                        "symbol": { "type": "string", "description": "Symbol name (function, struct, trait)" }
-                    },
-                    "required": ["project", "symbol"]
-                }),
-            },
-            ToolDef {
-                name: "kdo_dep_graph".into(),
-                description:
-                    "Query the dependency graph for a project. direction=deps or dependents.".into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "project": { "type": "string", "description": "Project name" },
-                        "direction": { "type": "string", "description": "Direction: 'deps' or 'dependents' (default deps)" }
-                    },
-                    "required": ["project"]
-                }),
-            },
-            ToolDef {
-                name: "kdo_affected".into(),
-                description: "List projects affected by git changes since base ref.".into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "base_ref": { "type": "string", "description": "Git base ref (default 'main')" }
-                    },
-                    "required": []
-                }),
-            },
-            ToolDef {
-                name: "kdo_search_code".into(),
-                description: "Search for a pattern across all workspace source files. Returns matching lines with file:line context.".into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "pattern": { "type": "string", "description": "Search pattern (substring match)" },
-                        "project": { "type": "string", "description": "Limit search to this project (optional)" }
-                    },
-                    "required": ["pattern"]
-                }),
-            },
-            ToolDef {
-                name: "kdo_run_task".into(),
-                description: "Execute a build/test/lint task in a workspace project. Returns stdout+stderr and exit status. Use for CI checks or triggering builds from agent context.".into(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "task": { "type": "string", "description": "Task name: build, test, lint, fmt, check, clean" },
-                        "project": { "type": "string", "description": "Project name to run in (required)" }
-                    },
-                    "required": ["task", "project"]
-                }),
-            },
-        ];
-
-        Ok(serde_json::json!({ "tools": tools }))
-    }
-
-    fn handle_tools_call(&self, params: &Value) -> Result<Value, Value> {
-        let name = params
-            .get("name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing tool name"))?;
-        let arguments = params
-            .get("arguments")
-            .cloned()
-            .unwrap_or(serde_json::json!({}));
-
-        debug!(tool = name, "calling tool");
-
-        match name {
-            "kdo_list_projects" => self.tool_list_projects(),
-            "kdo_get_context" => self.tool_get_context(&arguments),
-            "kdo_read_symbol" => self.tool_read_symbol(&arguments),
-            "kdo_dep_graph" => self.tool_dep_graph(&arguments),
-            "kdo_affected" => self.tool_affected(&arguments),
-            "kdo_search_code" => self.tool_search_code(&arguments),
-            "kdo_run_task" => self.tool_run_task(&arguments),
-            _ => Err(jsonrpc_error(-32602, &format!("unknown tool: {name}"))),
-        }
-    }
-
-    fn tool_list_projects(&self) -> Result<Value, Value> {
+#[rmcp::tool_router]
+impl KdoServer {
+    #[rmcp::tool(
+        description = "List all projects in the workspace with name, language, summary, and dependency count (~200 tokens total). Call this first to orient."
+    )]
+    async fn kdo_list_projects(&self) -> Result<CallToolResult, McpError> {
         let summaries = self.graph.project_summaries();
-        let json = serde_json::to_string_pretty(&summaries)
-            .map_err(|e| jsonrpc_error(-32603, &e.to_string()))?;
-        Ok(tool_result_text(&json))
+        let json = serde_json::to_string_pretty(&summaries).map_err(Self::internal_err)?;
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(json),
+        )]))
     }
 
-    fn tool_get_context(&self, args: &Value) -> Result<Value, Value> {
-        let project = args
-            .get("project")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'project' argument"))?;
-        let budget = args.get("budget").and_then(|v| v.as_u64()).unwrap_or(4096) as usize;
-
+    #[rmcp::tool(
+        description = "Get agent-optimized context bundle for a project within a token budget. Returns summary, public API signatures (via tree-sitter), and dependency list."
+    )]
+    async fn kdo_get_context(
+        &self,
+        Parameters(args): Parameters<GetContextArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let budget = args
+            .budget
+            .unwrap_or_else(|| self.profile.default_context_budget());
         let bundle = self
             .ctx_gen
-            .generate_bundle(project, budget, &self.graph)
-            .map_err(|e| jsonrpc_error(-32602, &e.to_string()))?;
-        Ok(tool_result_text(&bundle))
+            .generate_bundle(&args.project, budget, &self.graph)
+            .map_err(Self::params_err)?;
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(bundle),
+        )]))
     }
 
-    fn tool_read_symbol(&self, args: &Value) -> Result<Value, Value> {
-        let project = args
-            .get("project")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'project' argument"))?;
-        let symbol = args
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'symbol' argument"))?;
-
+    #[rmcp::tool(
+        description = "Read a specific symbol (function, struct, trait, class, type) body via tree-sitter. Use after kdo_get_context when you need the implementation, not just the signature."
+    )]
+    async fn kdo_read_symbol(
+        &self,
+        Parameters(args): Parameters<ReadSymbolArgs>,
+    ) -> Result<CallToolResult, McpError> {
         let source = self
             .ctx_gen
-            .read_symbol(project, symbol, &self.graph)
-            .map_err(|e| jsonrpc_error(-32602, &e.to_string()))?;
-        Ok(tool_result_text(&source))
+            .read_symbol(&args.project, &args.symbol, &self.graph)
+            .map_err(Self::params_err)?;
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(source),
+        )]))
     }
 
-    fn tool_dep_graph(&self, args: &Value) -> Result<Value, Value> {
-        let project = args
-            .get("project")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'project' argument"))?;
-        let direction = args
-            .get("direction")
-            .and_then(|v| v.as_str())
-            .unwrap_or("deps");
-
-        let result = match direction {
-            "dependents" => self.graph.affected_set_json(project),
-            _ => self.graph.dependency_closure_json(project),
+    #[rmcp::tool(
+        description = "Query the dependency graph. direction='deps' (default) for what this project depends on, 'dependents' for what depends on it."
+    )]
+    async fn kdo_dep_graph(
+        &self,
+        Parameters(args): Parameters<DepGraphArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let direction = args.direction.as_deref().unwrap_or("deps");
+        let json = match direction {
+            "dependents" => self.graph.affected_set_json(&args.project),
+            _ => self.graph.dependency_closure_json(&args.project),
         }
-        .map_err(|e| jsonrpc_error(-32602, &e.to_string()))?;
-        Ok(tool_result_text(&result))
+        .map_err(Self::params_err)?;
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(json),
+        )]))
     }
 
-    fn tool_affected(&self, args: &Value) -> Result<Value, Value> {
-        let base = args
-            .get("base_ref")
-            .and_then(|v| v.as_str())
-            .unwrap_or("main");
-
+    #[rmcp::tool(
+        description = "Projects affected by git changes since a base ref. Uses the dependency graph — touching a leaf marks every dependent."
+    )]
+    async fn kdo_affected(
+        &self,
+        Parameters(args): Parameters<AffectedArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let base = args.base_ref.as_deref().unwrap_or("main");
         let projects = self
             .graph
             .affected_since_ref(base)
-            .map_err(|e| jsonrpc_error(-32603, &e.to_string()))?;
-        let json = serde_json::to_string_pretty(&projects)
-            .map_err(|e| jsonrpc_error(-32603, &e.to_string()))?;
-        Ok(tool_result_text(&json))
+            .map_err(Self::internal_err)?;
+        let json = serde_json::to_string_pretty(&projects).map_err(Self::internal_err)?;
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(json),
+        )]))
     }
 
-    fn tool_search_code(&self, args: &Value) -> Result<Value, Value> {
-        let pattern = args
-            .get("pattern")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'pattern' argument"))?;
-        let project_filter = args.get("project").and_then(|v| v.as_str());
-
-        let projects: Vec<&kdo_core::Project> = if let Some(name) = project_filter {
+    #[rmcp::tool(
+        description = "Substring search across every workspace source file. Respects .gitignore and .kdoignore. Returns file:line:match hits."
+    )]
+    async fn kdo_search_code(
+        &self,
+        Parameters(args): Parameters<SearchCodeArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let projects: Vec<&kdo_core::Project> = if let Some(name) = &args.project {
             match self.graph.get_project(name) {
                 Ok(p) => vec![p],
-                Err(e) => return Err(jsonrpc_error(-32602, &e.to_string())),
+                Err(e) => return Err(Self::params_err(e)),
             }
         } else {
             self.graph.projects()
         };
 
         let mut results = Vec::new();
-        let max_results = 50;
+        let max_results = 50usize;
 
         'outer: for project in &projects {
             let walker = ignore::WalkBuilder::new(&project.path)
@@ -389,19 +261,20 @@ impl McpServer {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                 if !matches!(
                     ext,
-                    "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "toml" | "json"
+                    "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "toml" | "json"
                 ) {
                     continue;
                 }
-
                 if let Ok(content) = std::fs::read_to_string(path) {
                     for (i, line) in content.lines().enumerate() {
-                        if line.contains(pattern) {
-                            let rel_path = path
-                                .strip_prefix(&self.graph.root)
-                                .unwrap_or(path)
-                                .display();
-                            results.push(format!("{}:{}:{}", rel_path, i + 1, line.trim()));
+                        if line.contains(&args.pattern) {
+                            let rel_path = path.strip_prefix(self.root.as_ref()).unwrap_or(path);
+                            results.push(format!(
+                                "{}:{}:{}",
+                                rel_path.display(),
+                                i + 1,
+                                line.trim()
+                            ));
                             if results.len() >= max_results {
                                 break 'outer;
                             }
@@ -411,127 +284,239 @@ impl McpServer {
             }
         }
 
-        if results.is_empty() {
-            Ok(tool_result_text(&format!("no matches for '{pattern}'")))
+        let text = if results.is_empty() {
+            format!("no matches for '{}'", args.pattern)
         } else {
-            let header = format!("{} matches for '{pattern}':\n\n", results.len());
-            Ok(tool_result_text(&format!("{header}{}", results.join("\n"))))
-        }
+            format!(
+                "{} matches for '{}':\n\n{}",
+                results.len(),
+                args.pattern,
+                results.join("\n")
+            )
+        };
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(text),
+        )]))
     }
 
-    fn tool_run_task(&self, args: &Value) -> Result<Value, Value> {
-        let task = args
-            .get("task")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'task' argument"))?;
-        let project_name = args
-            .get("project")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| jsonrpc_error(-32602, "missing 'project' argument"))?;
-
+    #[rmcp::tool(
+        description = "Execute a build/test/lint task in a workspace project via the same resolution as `kdo run`. Returns stdout, stderr, and exit status."
+    )]
+    async fn kdo_run_task(
+        &self,
+        Parameters(args): Parameters<RunTaskArgs>,
+    ) -> Result<CallToolResult, McpError> {
         let project = self
             .graph
-            .get_project(project_name)
-            .map_err(|e| jsonrpc_error(-32602, &e.to_string()))?;
+            .get_project(&args.project)
+            .map_err(Self::params_err)?;
 
-        let cmd = resolve_default_task(&project.language, task).ok_or_else(|| {
-            jsonrpc_error(-32602, &format!("no '{task}' task for {project_name}"))
+        let cmd = resolve_default_task(&project.language, &args.task).ok_or_else(|| {
+            Self::params_err(format!("no '{}' task for {}", args.task, args.project))
         })?;
 
-        debug!(project = project_name, task, cmd = %cmd, "running task");
+        debug!(project = %args.project, task = %args.task, cmd = %cmd, "running task");
 
-        let output = std::process::Command::new("sh")
+        let output = tokio::process::Command::new("sh")
             .args(["-c", &cmd])
             .current_dir(&project.path)
             .output()
-            .map_err(|e| jsonrpc_error(-32603, &format!("failed to spawn process: {e}")))?;
+            .await
+            .map_err(|e| Self::internal_err(format!("failed to spawn process: {e}")))?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let success = output.status.success();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         let exit_code = output.status.code().unwrap_or(-1);
+        let success = output.status.success();
 
-        let result = format!(
-            "project: {project_name}\ntask: {task}\ncommand: {cmd}\nexit_code: {exit_code}\nsuccess: {success}\n\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+        let text = format!(
+            "project: {project}\ntask: {task}\ncommand: {cmd}\nexit_code: {exit_code}\nsuccess: {success}\n\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}",
+            project = args.project,
+            task = args.task,
         );
 
-        Ok(tool_result_text(&result))
+        Ok(CallToolResult::success(vec![Content::text(
+            self.cap_output(text),
+        )]))
     }
 }
 
-/// Format a text result in MCP tool call response format.
-fn tool_result_text(text: &str) -> Value {
-    serde_json::json!({
-        "content": [{ "type": "text", "text": text }]
-    })
+// ─────────────────────────── ServerHandler ───────────────────────────
+
+impl ServerHandler for KdoServer {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            protocol_version: ProtocolVersion::default(),
+            instructions: Some(self.profile.instructions().into()),
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build(),
+            server_info: Implementation {
+                name: "kdo".to_string(),
+                title: Some("kdo — workspace manager".to_string()),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                description: Some(
+                    "Context-native workspace manager for AI coding agents.".to_string(),
+                ),
+                icons: None,
+                website_url: Some("https://github.com/vivekpal1/kdo".to_string()),
+            },
+        }
+    }
+
+    // Auto-derived from tool_router.
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<rmcp::RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        Ok(ListToolsResult {
+            tools: self.tool_router.list_all(),
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    // Dispatch through the router, but first gate on the loop-detection guard.
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        let args_value = match &request.arguments {
+            Some(obj) => serde_json::Value::Object(obj.clone()),
+            None => serde_json::Value::Null,
+        };
+
+        // Gate: return the loop error to the agent instead of silently
+        // re-running the same call and burning more tokens.
+        {
+            let mut guard = self.loop_guard.lock().await;
+            if let Err(loop_err) = guard.record(&request.name, &args_value) {
+                return Err(McpError::invalid_params(loop_err.to_string(), None));
+            }
+        }
+
+        let ctx = ToolCallContext::new(self, request, context);
+        self.tool_router.call(ctx).await
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<rmcp::RoleServer>,
+    ) -> Result<ListResourcesResult, McpError> {
+        let context_dir = self.root.join(".kdo").join("context");
+        let mut resources: Vec<Resource> = Vec::new();
+
+        if let Ok(entries) = std::fs::read_dir(&context_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                    continue;
+                }
+                let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                    continue;
+                };
+                let raw = RawResource {
+                    uri: format!("kdo://context/{stem}"),
+                    name: format!("{stem} context"),
+                    description: Some(format!(
+                        "Pre-generated context bundle for project `{stem}`."
+                    )),
+                    mime_type: Some("text/markdown".into()),
+                    ..RawResource::new(format!("kdo://context/{stem}"), format!("{stem} context"))
+                };
+                resources.push(raw.no_annotation());
+            }
+        }
+
+        Ok(ListResourcesResult {
+            resources,
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<rmcp::RoleServer>,
+    ) -> Result<ReadResourceResult, McpError> {
+        let project = request.uri.strip_prefix("kdo://context/").ok_or_else(|| {
+            McpError::invalid_params(format!("unsupported uri: {}", request.uri), None)
+        })?;
+
+        // Defense-in-depth: reject path traversal / absolute paths.
+        if project.is_empty() || project.contains('/') || project.contains("..") {
+            return Err(McpError::invalid_params("invalid project name", None));
+        }
+
+        let path = self
+            .root
+            .join(".kdo")
+            .join("context")
+            .join(format!("{project}.md"));
+        let text = std::fs::read_to_string(&path).map_err(|e| {
+            McpError::internal_error(format!("failed to read {}: {e}", path.display()), None)
+        })?;
+
+        Ok(ReadResourceResult {
+            contents: vec![ResourceContents::text(text, request.uri)],
+        })
+    }
 }
 
-/// Create a JSON-RPC error object.
-fn jsonrpc_error(code: i64, message: &str) -> Value {
-    serde_json::json!({
-        "code": code,
-        "message": message
-    })
-}
+// ─────────────────────────── Transport ───────────────────────────
 
-/// JSON-RPC request structure.
-#[derive(Debug, Deserialize)]
-struct JsonRpcRequest {
-    #[allow(dead_code)]
-    jsonrpc: String,
-    id: Option<Value>,
-    method: String,
-    params: Option<Value>,
-}
-
-/// Run the MCP server on stdio. Reads JSON-RPC messages line-by-line.
-pub fn run_stdio(
+/// Run the MCP server on stdio. Blocks until the client disconnects.
+pub async fn run_stdio(
     graph: WorkspaceGraph,
     ctx_gen: ContextGenerator,
     root: PathBuf,
+    profile: AgentProfile,
 ) -> anyhow::Result<()> {
-    let server = McpServer::new(graph, ctx_gen, root);
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
-
-    for line in stdin.lock().lines() {
-        let line = line?;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let request: JsonRpcRequest = match serde_json::from_str(line) {
-            Ok(r) => r,
-            Err(e) => {
-                error!(error = %e, "failed to parse JSON-RPC request");
-                let err_resp = serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "id": null,
-                    "error": jsonrpc_error(-32700, &format!("parse error: {e}"))
-                });
-                writeln!(stdout, "{}", serde_json::to_string(&err_resp)?)?;
-                stdout.flush()?;
-                continue;
-            }
-        };
-
-        // Notifications (no id) don't get responses
-        if request.id.is_none() {
-            debug!(method = %request.method, "received notification");
-            continue;
-        }
-
-        let params = request.params.unwrap_or(serde_json::json!({}));
-        let id = request.id.unwrap_or(Value::Null);
-        let response = server.handle_request(&request.method, &params, &id);
-
-        let response_str = serde_json::to_string(&response)?;
-        debug!(method = %request.method, "sending response");
-        writeln!(stdout, "{response_str}")?;
-        stdout.flush()?;
-    }
-
+    let server = KdoServer::new(graph, ctx_gen, root, profile);
+    let transport = rmcp::transport::stdio();
+    let running = server.serve(transport).await?;
+    running.waiting().await?;
     Ok(())
+}
+
+// ─────────────────────────── Helpers ───────────────────────────
+
+/// Language-aware default task resolver. Mirrors `kdo-cli::run::resolve_task_command`
+/// but intentionally re-implemented here to avoid a circular crate dep.
+fn resolve_default_task(language: &kdo_core::Language, task_name: &str) -> Option<String> {
+    match language {
+        kdo_core::Language::Rust | kdo_core::Language::Anchor => match task_name {
+            "build" => Some("cargo build".into()),
+            "test" => Some("cargo test".into()),
+            "lint" => Some("cargo clippy".into()),
+            "fmt" => Some("cargo fmt".into()),
+            "check" => Some("cargo check".into()),
+            "clean" => Some("cargo clean".into()),
+            _ => None,
+        },
+        kdo_core::Language::TypeScript | kdo_core::Language::JavaScript => match task_name {
+            "build" => Some("npm run build".into()),
+            "test" => Some("npm test".into()),
+            "lint" => Some("npm run lint".into()),
+            _ => None,
+        },
+        kdo_core::Language::Python => match task_name {
+            "test" => Some("python3 -m pytest".into()),
+            "lint" => Some("ruff check .".into()),
+            "fmt" => Some("ruff format .".into()),
+            _ => None,
+        },
+        kdo_core::Language::Go => match task_name {
+            "build" => Some("go build ./...".into()),
+            "test" => Some("go test ./...".into()),
+            "lint" => Some("golangci-lint run".into()),
+            "fmt" => Some("gofmt -w .".into()),
+            _ => None,
+        },
+    }
 }

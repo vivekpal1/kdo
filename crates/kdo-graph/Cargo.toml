@@ -12,8 +12,8 @@ categories.workspace = true
 readme = "../../README.md"
 
 [dependencies]
-kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.3" }
-kdo-resolver = { path = "../kdo-resolver", version = "=0.1.0-alpha.3" }
+kdo-core = { path = "../kdo-core", version = "=0.2.0-alpha.1" }
+kdo-resolver = { path = "../kdo-resolver", version = "=0.2.0-alpha.1" }
 petgraph = { workspace = true }
 blake3 = { workspace = true }
 ignore = { workspace = true }
@@ -27,7 +27,7 @@ anyhow = { workspace = true }
 indexmap = { workspace = true }
 
 [dev-dependencies]
-kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.3" }
+kdo-core = { path = "../kdo-core", version = "=0.2.0-alpha.1" }
 serde_json = { workspace = true }
 proptest = "1"
 tempfile = "3"

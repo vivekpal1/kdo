@@ -16,10 +16,10 @@ name = "kdo"
 path = "src/main.rs"
 
 [dependencies]
-kdo-core = { path = "../kdo-core", version = "=0.1.0-alpha.3" }
-kdo-graph = { path = "../kdo-graph", version = "=0.1.0-alpha.3" }
-kdo-context = { path = "../kdo-context", version = "=0.1.0-alpha.3" }
-kdo-mcp = { path = "../kdo-mcp", version = "=0.1.0-alpha.3" }
+kdo-core = { path = "../kdo-core", version = "=0.2.0-alpha.1" }
+kdo-graph = { path = "../kdo-graph", version = "=0.2.0-alpha.1" }
+kdo-context = { path = "../kdo-context", version = "=0.2.0-alpha.1" }
+kdo-mcp = { path = "../kdo-mcp", version = "=0.2.0-alpha.1" }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 serde = { workspace = true }
@@ -35,3 +35,7 @@ owo-colors = { workspace = true }
 indicatif = { workspace = true }
 rayon = { workspace = true }
 ignore = { workspace = true }
+globset = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

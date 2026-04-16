@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["fixtures"]
 
 [workspace.package]
-version = "0.1.0-alpha.3"
+version = "0.2.0-alpha.1"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -43,6 +43,8 @@ clap_complete = "4.5"
 grep-regex = "0.1"
 grep-searcher = "0.1"
 globset = "0.4"
+rmcp = { version = "0.16.0", features = ["server", "transport-io", "macros"] }
+schemars = "0.8"
 
 [profile.release]
 lto = "thin"

@@ -1,8 +1,8 @@
 # kdo
 
-**Workspace manager for the agent era. Cuts Claude Code token consumption 2x on polyglot monorepos.**
+**Workspace manager for the agent era. Cuts AI agent token consumption on polyglot monorepos.**
 
-kdo scans your workspace, builds a dependency graph, and serves structured context via MCP instead of letting agents traverse the filesystem blindly. Current tools (Turbo, Nx, Moon, Bun) burn 60-80% of agent tokens on navigation. kdo fixes this.
+kdo scans your workspace, builds a dependency graph, and serves structured context via MCP instead of letting agents traverse the filesystem blindly. Turbo/Nx/Moon/Bun don't speak Rust + Python + Anchor in one graph — kdo does, and ships an MCP server with seven tools, agent profiles (Claude Code, OpenClaw, generic), and a loop guard that prevents deadly token-burn retries.
 
 ## Install
 
@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/vivekpal1/kdo/main/install.sh | bas
 **From crates.io (requires the version flag for pre-releases):**
 
 ```bash
-cargo install kdo --version "0.1.0-alpha.3"
+cargo install kdo --version "0.2.0-alpha.1"
 ```
 
 > `cargo install kdo` without `--version` fails with "could not find `kdo` in registry"
@@ -148,13 +148,29 @@ __pycache__/
 
 ## Benchmark
 
-Measured on a Solana monorepo (Anchor program + TS SDK + Python tool):
+Reproducible via `kdo bench` — measures the bytes an fs-walking agent would read
+against the bytes kdo actually returns for the same scope. No mocking, no fake
+numbers.
 
-| Method | ~Tokens | Description |
-|--------|---------|-------------|
-| `find + cat *.rs *.ts *.py` | ~12,400 | Raw filesystem traversal |
-| `kdo context vault-program` | ~1,800 | Structured, budgeted context |
-| **Reduction** | **~7x** | Only public API signatures, summaries, deps |
+**`fixtures/sample-monorepo`** (Anchor program + TS SDK + Rust lib + Python tool):
+
+| Task | baseline | with kdo | reduction |
+|------|----------|----------|-----------|
+| fix-withdraw-bug | 463 tok | 479 tok | 0.0% |
+| add-vault-method | 579 tok | 519 tok | 10.3% |
+| refactor-fee-harvest | 990 tok | 640 tok | **35.3%** |
+| **average** | 2.0k tok | 1.6k tok | **19.4%** |
+
+These numbers are from a deliberately small fixture — real monorepos have much
+larger source files, which makes the baseline grow while kdo stays capped at
+the context-budget cost. Run `kdo bench` on your own repo with a real
+`.kdo/bench/tasks.toml` for honest numbers against your actual codebase.
+
+For a real-session measurement (not proxy), use:
+
+```bash
+kdo bench --from-log ~/.claude/projects/<slug>/<session>.jsonl
+```
 
 ## Architecture
 
@@ -178,40 +194,35 @@ graph LR
 | `kdo-resolver` | Manifest parsers: `Cargo.toml`, `package.json`, `pyproject.toml`, `Anchor.toml` |
 | `kdo-graph` | `WorkspaceGraph` via petgraph — discovery, DFS/BFS queries, blake3 hashing, cycle detection |
 | `kdo-context` | Tree-sitter signature extraction, context generation, token budget enforcement |
-| `kdo-mcp` | MCP server (JSON-RPC 2.0 over stdio) exposing 5 tools |
+| `kdo-mcp` | MCP server (built on rmcp 0.16) — 7 tools, resources, loop-guard, agent profiles |
 | `kdo-cli` | Clap subcommands, interactive scaffolding, tabled output |
 
-## MCP setup
+## Agent setup
 
-### Claude Code
+One command per agent:
 
-Add to `~/.claude/mcp_servers.json` or `.claude/mcp_servers.json`:
-
-```json
-{
-  "mcpServers": {
-    "kdo": {
-      "command": "kdo",
-      "args": ["serve", "--transport", "stdio"]
-    }
-  }
-}
+```bash
+kdo setup claude --global         # Claude Code, user-level MCP registration + CLAUDE.md
+kdo setup openclaw --global       # OpenClaw, AgentSkills-spec SKILL.md + openclaw.json merge
+kdo setup claude --dry-run        # preview every file + command, touch nothing
 ```
 
-### Cursor
+Drop `--global` to write into the current workspace only. Re-running is safe —
+sentinels preserve surrounding user content; JSON merges preserve siblings.
 
-Add to `.cursor/mcp.json`:
+### Manual registration (any MCP client)
 
-```json
-{
-  "mcpServers": {
-    "kdo": {
-      "command": "kdo",
-      "args": ["serve", "--transport", "stdio"]
-    }
-  }
-}
+```bash
+kdo serve --transport stdio --agent generic
 ```
+
+`--agent` tunes context budgets, loop-detection windows, and tool-description
+verbosity. Profiles: `claude`, `openclaw`, `generic` (default).
+
+**Loop guard.** The server returns a structured `"loop detected"` error after
+N identical tool calls in a row (OpenClaw: 3, others: 5). Prevents deadly
+token-burn loops — the agent sees the error and changes strategy instead of
+silently retrying.
 
 ## MCP tools
 

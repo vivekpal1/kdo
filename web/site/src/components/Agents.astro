@@ -6,58 +6,58 @@ const agents = [
     label: "claude code",
     title: "Claude Code",
     description:
-      "Register kdo as a global MCP server. After this, every project gets the kdo_list_projects, kdo_get_context, kdo_search_code, and kdo_run_task tools — no per-repo setup.",
-    docsHref: "https://docs.claude.com/en/docs/claude-code/mcp",
-    docsLabel: "Claude Code MCP docs",
+      "One command registers kdo globally, updates CLAUDE.md with the usage block, and seeds shared memory. Verified — MCP handshake + tool calls round-trip.",
+    status: "verified",
+    docsHref: "https://vivekpal1.github.io/kdo/docs/mcp#claude-code",
     snippets: [
       {
-        caption: "register the server (one-time)",
-        code: "claude mcp add --scope user kdo -- kdo serve --transport stdio",
+        caption: "one-command setup",
+        code: "kdo setup claude --global",
         lang: "bash",
       },
       {
-        caption: "verify",
-        code: "claude mcp list",
+        caption: "preview first (writes nothing)",
+        code: "kdo setup claude --global --dry-run",
         lang: "bash",
       },
     ],
   },
   {
-    label: "Openclaw",
-    title: "Openclaw",
+    label: "openclaw",
+    title: "OpenClaw",
     description:
-      "Add kdo to your Openclaw config (workspace `Openclaw.json` or `~/.openclaw/openclaw.json`). Openclaw auto-discovers it on next launch.",
-    docsHref: "https://docs.openclaw.ai",
-    docsLabel: "Openclaw MCP docs",
+      "Installs kdo as an AgentSkills-spec skill and registers the MCP server in ~/.openclaw/openclaw.json. OpenClaw-tuned profile: tighter token budgets, 3-call loop guard, short tool descriptions.",
+    status: "supported",
+    docsHref: "https://vivekpal1.github.io/kdo/docs/mcp#openclaw",
     snippets: [
       {
-        caption: ".openclaw/openclaw.json",
-        code: `{
-  "$schema": "https://docs.openclaw.ai/gateway/configuration",
-  "mcp": {
-    "kdo": {
-      "type": "local",
-      "command": ["kdo", "serve", "--transport", "stdio"],
-      "enabled": true
-    }
-  }
-}`,
-        lang: "json",
+        caption: "one-command setup",
+        code: "kdo setup openclaw --global",
+        lang: "bash",
+      },
+      {
+        caption: "preview first (writes nothing)",
+        code: "kdo setup openclaw --global --dry-run",
+        lang: "bash",
       },
     ],
   },
 ];
+
+const statusLabel = (status: string) =>
+  status === "verified" ? "tested end-to-end" : "spec-compliant, untested";
 ---
 
 <section id="agents" class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
   <div class="mx-auto max-w-2xl text-center">
     <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">use with your agent</p>
     <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-      Plug it into your AI.
+      One command wires it up.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      kdo speaks MCP over stdio. Any agent that supports MCP can use it — orient on a workspace,
-      pull token-budgeted context, search code, run tasks. Below are the two most common.
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup</code> registers the MCP server,
+      drops in a usage block, seeds shared memory, and tunes the server to the target agent's budget and loop-tolerance.
+      Idempotent — safe to re-run.
     </p>
   </div>
 
@@ -67,13 +67,9 @@ const agents = [
         <div class="glass flex flex-col rounded-2xl p-5 sm:p-6">
           <div class="flex items-baseline justify-between gap-4">
             <span class="font-mono text-xs uppercase tracking-[0.18em] text-tide">{agent.label}</span>
-            <a
-              href={agent.docsHref}
-              class="text-[11px] text-ink-3 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide"
-              rel="noopener"
-            >
-              docs ↗
-            </a>
+            <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-3">
+              {statusLabel(agent.status)}
+            </span>
           </div>
 
           <h3 class="mt-2 text-xl font-medium tracking-tight text-ink">{agent.title}</h3>
@@ -89,13 +85,24 @@ const agents = [
               </div>
             ))}
           </div>
+
+          <a
+            href={agent.docsHref}
+            class="mt-4 inline-flex items-center gap-1 text-[11px] text-ink-3 transition-colors duration-100 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tide"
+          >
+            MCP reference ↗
+          </a>
         </div>
       ))
     }
   </div>
 
-  <p class="mx-auto mt-8 max-w-2xl text-center text-sm text-ink-3">
-    Other MCP-capable clients (Cursor, Zed, Cline, Continue) follow the same pattern — point them at
-    <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo serve --transport stdio</code>.
-  </p>
+  <div class="mx-auto mt-10 max-w-2xl rounded-2xl border border-line bg-canvas-2/60 px-5 py-4 text-sm text-ink-2">
+    <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-tide">other clients</span>
+    <p class="mt-2 leading-relaxed text-ink-3">
+      Cursor, Zed, Cline, Continue, and anything else speaking the MCP spec — point them at
+      <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">kdo serve --transport stdio --agent generic</code>.
+      No dedicated setup command yet; follow the client's own MCP-server config path.
+    </p>
+  </div>
 </section>

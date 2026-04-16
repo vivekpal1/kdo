@@ -91,42 +91,47 @@ kdo run build -- --release      # pass args through to the underlying command
 
 ### Claude Code
 
+One command:
+
 ```bash
-claude mcp add --scope user kdo -- kdo serve --transport stdio
+kdo setup claude --global
 ```
 
-Registered globally. Every new project gets the kdo tools with no per-repo setup.
+This registers kdo as a user-scope MCP server (via `claude mcp add`), updates `~/.claude/CLAUDE.md` with a usage block, and seeds shared agent memory. Re-running is safe — it converges to the same state.
+
+Preview without touching disk:
+
+```bash
+kdo setup claude --global --dry-run
+```
 
 Verify:
 
 ```bash
 claude mcp list
-# kdo: kdo serve --transport stdio - ✓ Connected
+# kdo: kdo serve --transport stdio --agent claude - ✓ Connected
 ```
 
-### Openclaw
+### OpenClaw
 
-Add to `Openclaw.json` (workspace root or `~/.config/Openclaw/Openclaw.json`):
+Same pattern:
 
-```json
-{
-  "$schema": "https://Openclaw.ai/config.json",
-  "mcp": {
-    "kdo": {
-      "type": "local",
-      "command": ["kdo", "serve", "--transport", "stdio"],
-      "enabled": true
-    }
-  }
-}
+```bash
+kdo setup openclaw --global
 ```
+
+Writes an AgentSkills-spec `SKILL.md` under `~/.openclaw/skills/kdo/`, merges the MCP server registration into `~/.openclaw/openclaw.json` at `/mcpServers/kdo`, and seeds memory. Restart OpenClaw to pick it up.
+
+### Workspace-scoped (no `--global`)
+
+Drop `--global` and `kdo setup` writes to the current workspace only — local MCP scope for Claude, per-project skill + `AGENTS.md` for OpenClaw, plus `.kdo/memory/MEMORY.md` either way.
 
 ### Any other MCP client
 
 Point it at:
 
 ```bash
-kdo serve --transport stdio
+kdo serve --transport stdio --agent generic
 ```
 
 The server exposes 7 tools and a `resources/list` endpoint for the context files. Full catalog in [MCP server](./mcp).

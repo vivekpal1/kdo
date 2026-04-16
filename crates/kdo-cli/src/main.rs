@@ -1,6 +1,8 @@
 //! kdo CLI — context-native workspace manager for AI agents.
 
+mod bench;
 mod run;
+mod setup;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
@@ -122,6 +124,11 @@ enum Commands {
         /// Transport type.
         #[arg(long, default_value = "stdio")]
         transport: String,
+
+        /// Agent profile: `claude`, `openclaw`, or `generic`. Tunes context budget,
+        /// loop-detection window, and tool description length for the target agent.
+        #[arg(long, default_value = "generic")]
+        agent: String,
     },
 
     /// Find projects structurally similar to the given one.
@@ -146,6 +153,36 @@ enum Commands {
         /// Only search this project.
         #[arg(long)]
         filter: Option<String>,
+    },
+
+    /// Benchmark token consumption: baseline (filesystem walk) vs kdo (MCP).
+    Bench {
+        /// Only run tasks whose name contains this substring.
+        #[arg(long)]
+        task: Option<String>,
+
+        /// Repeat each measurement this many times and report the median.
+        #[arg(long, default_value = "1")]
+        iterations: usize,
+
+        /// Instead of proxy measurement, parse a real agent session log
+        /// (Claude Code JSONL) and report observed token usage.
+        #[arg(long, value_name = "PATH")]
+        from_log: Option<std::path::PathBuf>,
+    },
+
+    /// Wire kdo into a coding agent's config (Claude Code or OpenClaw).
+    Setup {
+        /// Agent to set up: `claude` or `openclaw`.
+        agent: String,
+
+        /// Write to user-level config instead of workspace-level.
+        #[arg(long)]
+        global: bool,
+
+        /// Print every file + command that would change, without touching disk.
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Upgrade kdo to the latest release (or a specific version).
@@ -227,13 +264,23 @@ fn main() -> miette::Result<()> {
         Commands::Affected { base, format } => cmd_affected(&base, format)?,
         Commands::Doctor => cmd_doctor()?,
         Commands::Completions { shell } => cmd_completions(shell)?,
-        Commands::Serve { transport } => cmd_serve(&transport)?,
+        Commands::Serve { transport, agent } => cmd_serve(&transport, &agent)?,
         Commands::Similar {
             project,
             limit,
             format,
         } => cmd_similar(&project, limit, format)?,
         Commands::Source { symbol, filter } => cmd_source(&symbol, filter.as_deref())?,
+        Commands::Bench {
+            task,
+            iterations,
+            from_log,
+        } => bench::cmd_bench(task.as_deref(), iterations, from_log.as_deref())?,
+        Commands::Setup {
+            agent,
+            global,
+            dry_run,
+        } => setup::cmd_setup(&agent, global, dry_run)?,
         Commands::Upgrade { version, dry_run } => cmd_upgrade(version.as_deref(), dry_run)?,
     }
 
@@ -1006,13 +1053,24 @@ fn cmd_completions(shell: Shell) -> miette::Result<()> {
     Ok(())
 }
 
-fn cmd_serve(transport: &str) -> miette::Result<()> {
+fn cmd_serve(transport: &str, agent: &str) -> miette::Result<()> {
+    let profile: kdo_mcp::AgentProfile = agent
+        .parse()
+        .map_err(|e: kdo_mcp::UnknownAgent| miette::miette!("{e}"))?;
+
     match transport {
         "stdio" => {
             let root = std::env::current_dir().into_diagnostic()?;
             let graph = WorkspaceGraph::discover(&root).map_err(|e| miette::miette!("{e}"))?;
             let ctx_gen = ContextGenerator::new();
-            kdo_mcp::run_stdio(graph, ctx_gen, root).map_err(|e| miette::miette!("{e}"))?;
+
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .into_diagnostic()?;
+            runtime
+                .block_on(kdo_mcp::run_stdio(graph, ctx_gen, root, profile))
+                .map_err(|e| miette::miette!("{e}"))?;
         }
         other => {
             miette::bail!("unsupported transport: {other}. Only 'stdio' is supported.");

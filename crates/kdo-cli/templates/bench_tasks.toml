@@ -1,0 +1,39 @@
+# kdo bench tasks — each entry describes one realistic editing task.
+#
+# `baseline_files` is the glob set a filesystem-walking agent would read to
+# orient itself. kdo bench sums those bytes as the naive baseline.
+#
+# `projects` is the list a kdo-aware agent would call kdo_get_context against.
+# Bench sums the bytes kdo actually returns for those calls.
+#
+# Both are real measurements — no mocking. Edit to match your repo.
+
+[[task]]
+name = "fix-withdraw-bug"
+description = "Fix a bug in the vault withdraw instruction"
+projects = ["vault-program", "vault_program", "common-lib"]
+baseline_files = [
+    "programs/**/*.rs",
+    "common-lib/**/*.rs",
+]
+
+[[task]]
+name = "add-vault-method"
+description = "Add a new public method to the vault SDK"
+projects = ["vault-sdk", "vault-program", "vault_program"]
+baseline_files = [
+    "sdk/**/*.ts",
+    "sdk/**/*.tsx",
+    "programs/**/*.rs",
+]
+
+[[task]]
+name = "refactor-fee-harvest"
+description = "Refactor the fee-harvesting logic across program + SDK + tool"
+projects = ["vault-program", "vault_program", "vault-sdk", "vault-tool", "common-lib"]
+baseline_files = [
+    "programs/**/*.rs",
+    "common-lib/**/*.rs",
+    "sdk/**/*.ts",
+    "tools/**/*.py",
+]
