@@ -5,7 +5,7 @@ description: Install kdo, initialize a workspace, run your first task, and regis
 slug: "getting-started"
 ---
 
-A 5-minute path from zero to a running kdo workspace with MCP wired into Claude Code or OpenCode.
+A 5-minute path from zero to a running kdo workspace with MCP wired into Claude Code or Openclaw.
 
 ## 1. Install
 
@@ -104,13 +104,13 @@ claude mcp list
 # kdo: kdo serve --transport stdio - ✓ Connected
 ```
 
-### OpenCode
+### Openclaw
 
-Add to `opencode.json` (workspace root or `~/.config/opencode/opencode.json`):
+Add to `Openclaw.json` (workspace root or `~/.config/Openclaw/Openclaw.json`):
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://Openclaw.ai/config.json",
   "mcp": {
     "kdo": {
       "type": "local",

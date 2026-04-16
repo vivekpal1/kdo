@@ -602,6 +602,7 @@ dependencies = [
  "kdo-graph",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
  "tracing",
 ]
