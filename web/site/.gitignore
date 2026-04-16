@@ -1,0 +1,18 @@
+# Astro
+dist/
+.astro/
+
+# node
+node_modules/
+
+# Lockfile intentionally not committed: the Rolldown native-binding bug
+# (https://github.com/npm/cli/issues/4828) means npm prunes optional deps
+# for non-host platforms from the lockfile, which breaks Linux CI when the
+# lockfile was generated on macOS (and vice versa). For a static docs site,
+# determinism at build time is not worth shipping broken CI — we resolve
+# fresh on every deploy. Switch to pnpm/bun later if we want determinism back.
+package-lock.json
+
+# OS / editors
+.DS_Store
+*.local

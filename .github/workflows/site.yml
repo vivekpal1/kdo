@@ -23,14 +23,30 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/site
     steps:
       - uses: actions/checkout@v4
 
-      - uses: withastro/action@v3
+      - uses: actions/setup-node@v4
         with:
-          path: web/site
-          node-version: 20
-          package-manager: npm@latest
+          node-version: "20"
+
+      # We deliberately skip a lockfile (see web/site/.gitignore) because
+      # npm's optional-dependency handling breaks cross-platform lockfiles
+      # for native bindings like @rolldown/binding-*. A fresh resolve on
+      # Linux picks up the right binary every time.
+      - name: Install
+        run: npm install --no-package-lock
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/site/dist
 
   deploy:
     name: Deploy to GitHub Pages
