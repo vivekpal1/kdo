@@ -2,14 +2,23 @@
 import Base from "./Base.astro";
 import Header from "../components/Header.astro";
 
-interface Props {
+interface FrontmatterShape {
   title: string;
   description?: string;
-  /** Path within /docs — e.g. "getting-started" */
+  /** Path within /docs — e.g. "getting-started". Empty string for the index. */
   slug: string;
 }
 
-const { title, description, slug } = Astro.props;
+// MDX/MD pages pass their frontmatter via `Astro.props.frontmatter`. For normal
+// `.astro` consumers, also accept top-level props.
+const { frontmatter, ...rest } = Astro.props as Partial<FrontmatterShape> & {
+  frontmatter?: FrontmatterShape;
+};
+const fm = frontmatter ?? (rest as FrontmatterShape);
+
+const title = fm.title;
+const description = fm.description;
+const slug = fm.slug ?? "";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "") || "";
 
@@ -31,7 +40,8 @@ const nav = [
   },
 ];
 
-const pageTitle = `${title} · kdo docs`;
+// Let Base.astro handle the "· kdo" suffix. We just pass the raw docs title.
+const pageTitle = `${title} · Docs`;
 ---
 
 <Base title={pageTitle} description={description}>

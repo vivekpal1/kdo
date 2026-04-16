@@ -2,18 +2,51 @@
 import "../styles/global.css";
 
 interface Props {
+  /** Page title. Gets suffixed with " · kdo" unless it already mentions kdo. */
   title?: string;
+  /** Page description. Falls back to the site tagline. */
   description?: string;
+  /** Override the OG image path. Relative to `base` unless it's an absolute URL. */
+  ogImage?: string;
+  /** Page type for OG metadata. Defaults to "website". */
+  ogType?: "website" | "article";
 }
 
+const SITE_NAME = "kdo";
+const SITE_TAGLINE = "Workspace manager for the agent era";
+const DEFAULT_DESCRIPTION =
+  "Cuts AI agent token consumption 5–10× on polyglot monorepos. Polyglot graph, MCP context, pipeline runner — one binary.";
+
 const {
-  title = "kdo — workspace manager for the agent era",
-  description = "Cuts AI agent token consumption 5–10× on polyglot monorepos. Polyglot graph, MCP context, pipeline runner — one binary.",
+  title,
+  description = DEFAULT_DESCRIPTION,
+  ogImage,
+  ogType = "website",
 } = Astro.props;
 
 // `BASE_URL` is `/` on root deploys, `/kdo` for the project subpath. Strip any
 // trailing slash so we can append paths uniformly with `${base}/path`.
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Compose the final title. Landing page gets the tagline; other pages get their
+// title + site name. Never render literal "undefined".
+const pageTitle =
+  !title || title === SITE_NAME
+    ? `${SITE_NAME} — ${SITE_TAGLINE.toLowerCase()}`
+    : title.toLowerCase().includes("kdo")
+      ? title
+      : `${title} · ${SITE_NAME}`;
+
+// Absolute canonical URL (for OG + canonical link).
+const canonicalHref = new URL(Astro.url.pathname, Astro.site ?? "https://vivekpal1.github.io").toString();
+
+// Resolve the OG image URL. Fallback: site-level favicon so the card at least
+// shows the brand marble until we ship a real OG image.
+const ogImageUrl = ogImage
+  ? ogImage.startsWith("http")
+    ? ogImage
+    : new URL(ogImage, canonicalHref).toString()
+  : new URL(`${base}/favicon.svg`, canonicalHref).toString();
 ---
 
 <!doctype html>
@@ -22,13 +55,31 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
+
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
-    <title>{title}</title>
+    <link rel="canonical" href={canonicalHref} />
+
+    <title>{pageTitle}</title>
     <meta name="description" content={description} />
-    <meta property="og:title" content={title} />
+    <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111722" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
-    <meta name="theme-color" content="#f7f8fa" />
+    <meta property="og:url" content={canonicalHref} />
+    <meta property="og:image" content={ogImageUrl} />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+
+    <meta name="robots" content="index,follow" />
+    <meta name="author" content="Vivek Pal" />
   </head>
   <body class="bg-canvas text-ink antialiased">
     <slot />

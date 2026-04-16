@@ -73,6 +73,9 @@ const tabs = [
     ta.select();
     let ok = false;
     try {
+      // Deprecated, but still the only reliable fallback when the async
+      // Clipboard API is blocked (http:// origins, some iframes, older Safari).
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
       ok = document.execCommand("copy");
     } catch {
       ok = false;
