@@ -101,7 +101,7 @@ jobs:
         shell: bash
 
       - name: Upload release artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: kdo-${{ github.ref_name }}-${{ matrix.target }}.*
           body_path: CHANGELOG.md
