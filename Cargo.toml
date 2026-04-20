@@ -29,7 +29,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 miette = { version = "7", features = ["fancy"] }
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
-tree-sitter = "0.22"
+tree-sitter = "0.26"
 tree-sitter-rust = "0.21"
 tree-sitter-typescript = "0.21"
 tree-sitter-python = "0.21"
