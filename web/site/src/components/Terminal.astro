@@ -17,19 +17,16 @@
 
     <!-- output -->
     <pre class="mt-3 overflow-x-auto font-mono text-[13px] leading-6 text-ink-2 tabular-nums sm:text-sm"><code><span class="text-ink-3">$</span> <span class="text-ink">kdo init</span>
-<span class="text-ink-3">  discovering workspace…</span>
-<span class="text-tide">✓</span> <span class="text-ink">11 projects</span> <span class="text-ink-3">found</span> <span class="text-ink-3">(rust · ts · python · go)</span>
-<span class="text-tide">✓</span> <span class="text-ink-3">graph built:</span> <span class="text-ink">14 edges, 0 cycles</span>
-<span class="text-tide">✓</span> <span class="text-ink-3">context generated:</span> <span class="text-ink">11 files, 28k tokens</span>
+<span class="text-ink-3">  4 projects</span> <span class="text-ink">rust, typescript, python, anchor</span>
+<span class="text-ink-3">  wrote kdo.toml and .kdo/context/</span>
 
-<span class="text-ink-3">$</span> <span class="text-ink">kdo setup claude --global</span>
-<span class="text-tide">✓</span> <span class="text-ink-3">registered kdo with Claude Code (user scope)</span>
-<span class="text-tide">✓</span> <span class="text-ink-3">wrote</span> <span class="text-ink">~/.claude/CLAUDE.md</span>
+<span class="text-ink-3">$</span> <span class="text-ink">kdo context vault-program --budget 2048</span>
+<span class="text-ink-3">  vault-program.md</span> <span class="text-ink">under budget</span>
 
-<span class="text-ink-3">$</span> <span class="text-ink">kdo run ci --filter api</span>
-<span class="text-ink-3">[</span><span class="text-tide">api:lint</span><span class="text-ink-3">]</span> <span class="text-ink">cargo clippy --all-targets -- -D warnings</span>
-<span class="text-ink-3">[</span><span class="text-tide">api:lint</span><span class="text-ink-3">]</span> <span class="text-ink-3">done</span>
-<span class="text-ink-3">[</span><span class="text-tide">api:test</span><span class="text-ink-3">]</span> <span class="text-ink">cargo nextest run</span>
-<span class="text-ink-3">[</span><span class="text-tide">api:test</span><span class="text-ink-3">]</span> <span class="text-ink-3">42 passed in 1.8s</span></code></pre>
+<span class="text-ink-3">$</span> <span class="text-ink">kdo apply -f specs/hello.yaml</span>
+<span class="text-ink-3">  created spec</span> <span class="text-ink">hello</span>
+<span class="text-ink-3">$</span> <span class="text-ink">kdo factory tick</span>
+<span class="text-ink-3">  plan, implement, test, review</span>
+<span class="text-ink-3">  merge waits if the checkout is dirty</span></code></pre>
   </div>
 </div>

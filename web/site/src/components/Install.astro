@@ -10,7 +10,7 @@ const tabs = [
   {
     label: "cargo",
     hint: "explicit version for pre-releases",
-    cmd: 'cargo install kdo --version "0.2.0-alpha.1"',
+    cmd: 'cargo install kdo --version "0.3.0-alpha.1"',
   },
 ];
 ---
@@ -19,14 +19,12 @@ const tabs = [
   <div class="mx-auto max-w-2xl text-center">
     <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">install</p>
     <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-      One command. Two flavors.
+      Binary or Cargo.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      Pre-<code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">0.1.0</code>, so cargo needs the
-      version flag. Once stable ships, plain
-      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">cargo install kdo</code> will work.
-      Then run <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup claude</code> or
-      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup openclaw</code> to wire your agent.
+      Still pre-1.0. Cargo skips alphas unless you pass
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">--version</code>.
+      The shell script downloads the GitHub release and does not need Rust.
     </p>
   </div>
 

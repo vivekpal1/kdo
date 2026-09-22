@@ -294,7 +294,7 @@ Context files are generated once during `kdo init` and cached under `.kdo/contex
 
 - **"Connection failed"** in Claude Code / other clients: run `kdo serve --transport stdio` manually and pipe in the initialize message above. If that works, the client's config is pointing at the wrong binary path.
 - **Empty context / minimal signatures:** make sure source files have public API markers (`pub fn`, `export function`, etc.). Check `.kdoignore` isn't excluding source directories.
-- **Tool not found:** confirm the version. Older versions didn't ship `kdo_run_task` or resources. `kdo --version` should print `0.2.0-alpha.1` or later.
+- **Tool not found:** confirm the version. Older versions didn't ship `kdo_run_task` or resources. `kdo --version` should print `0.3.0-alpha.1` or later.
 
 ## Roadmap
 

@@ -36,41 +36,37 @@
     </div>
 
     <div>
-      <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">config that grows with you</p>
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">kdo.toml</p>
       <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-        Tasks with shape.
+        A task is a command.
       </h2>
       <p class="mt-5 text-lg text-ink-3">
-        Bare strings work. Pipelines with <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">depends_on</code>,
-        env merging, aliases, and per-project overrides also work. Same file, gradient of complexity.
+        <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">test = "cargo test"</code> is enough.
+        Add <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">depends_on</code> only when order matters.
       </p>
       <ul class="mt-8 space-y-4 text-ink-2">
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">^task</code> runs the task in every upstream dep first.
-            Topological build orchestration in one character.
+            <code class="font-mono text-sm text-ink">^build</code> runs <code class="font-mono text-sm text-ink">build</code> in upstream projects before this one.
           </span>
         </li>
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">//task</code> fans the task across the whole workspace.
-            CI in one line.
+            <code class="font-mono text-sm text-ink">//lint</code> runs <code class="font-mono text-sm text-ink">lint</code> in every project first.
           </span>
         </li>
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">--dry-run</code> prints the resolved plan with env, persistent
-            markers, and the exact command kdo would run.
+            <code class="font-mono text-sm text-ink">kdo run test --dry-run</code> prints the commands. It does not run them.
           </span>
         </li>
         <li class="flex items-start gap-3">
           <span aria-hidden="true" class="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-tide"></span>
           <span>
-            <code class="font-mono text-sm text-ink">[projects.&lt;name&gt;]</code> overrides any task or env for
-            one project. Anchor, Bun, and Cargo coexist in the same file.
+            <code class="font-mono text-sm text-ink">[projects.api.tasks]</code> replaces one task for one project. The rest of the file stays shared.
           </span>
         </li>
       </ul>

@@ -6,8 +6,8 @@ const agents = [
     label: "claude code",
     title: "Claude Code",
     description:
-      "One command registers kdo globally, updates CLAUDE.md with the usage block, and seeds shared memory. Verified end to end: MCP handshake + tool calls round-trip.",
-    status: "verified",
+      "Writes the Claude Code MCP entry and a CLAUDE.md block between sentinels. Running it again updates that block and leaves the rest of the file alone.",
+    status: "setup command",
     docsHref: "https://vivekpal1.github.io/kdo/docs/mcp#claude-code",
     snippets: [
       {
@@ -26,8 +26,8 @@ const agents = [
     label: "openclaw",
     title: "OpenClaw",
     description:
-      "Installs kdo as an AgentSkills-spec skill and registers the MCP server in ~/.openclaw/openclaw.json. OpenClaw-tuned profile: tighter token budgets, 3-call loop guard, short tool descriptions.",
-    status: "supported",
+      "Writes an AgentSkills SKILL.md and merges the MCP server into ~/.openclaw/openclaw.json. The openclaw profile uses a 3-call loop window.",
+    status: "setup command",
     docsHref: "https://vivekpal1.github.io/kdo/docs/mcp#openclaw",
     snippets: [
       {
@@ -44,21 +44,20 @@ const agents = [
   },
 ];
 
-const statusLabel = (status: string) =>
-  status === "verified" ? "tested end-to-end" : "spec-compliant, untested";
+const statusLabel = (status: string) => status;
 ---
 
 <section id="agents" class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
   <div class="mx-auto max-w-2xl text-center">
-    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">use with your agent</p>
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">mcp</p>
     <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-      One endpoint. Every agent.
+      Register the server once.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      Install kdo once, register it once. Every MCP-compatible agent you open reads the same workspace intelligence.
-      Claude Code and OpenClaw get tuned profiles; everything else works via
-      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">--agent generic</code>.
-      Re-running <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup</code> converges to the same state.
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo setup</code> writes the client config.
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">--dry-run</code> prints the files and writes nothing.
+      Cursor, Zed, Cline, and Continue use
+      <code class="rounded bg-canvas-2 px-1.5 py-0.5 font-mono text-sm text-ink">kdo serve --transport stdio --agent generic</code>.
     </p>
   </div>
 
@@ -99,11 +98,14 @@ const statusLabel = (status: string) =>
   </div>
 
   <div class="mx-auto mt-10 max-w-2xl rounded-2xl border border-line bg-canvas-2/60 px-5 py-4 text-sm text-ink-2">
-    <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-tide">other clients</span>
+    <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-tide">keys</span>
     <p class="mt-2 leading-relaxed text-ink-3">
-      Cursor, Zed, Cline, Continue, and anything else speaking the MCP spec: point them at
-      <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">kdo serve --transport stdio --agent generic</code>.
-      No dedicated setup command yet; follow the client's own MCP-server config path.
+      Factory runs use your key. Set <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">ANTHROPIC_API_KEY</code> or
+      <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">OPENAI_API_KEY</code>, or put names under
+      <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">[keys]</code> in
+      <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">~/.kdo/credentials.toml</code>.
+      <code class="rounded bg-canvas px-1.5 py-0.5 font-mono text-sm text-ink">kdo keys status</code> prints set or missing, never the secret.
+      With no key, the factory uses a mock provider.
     </p>
   </div>
 </section>

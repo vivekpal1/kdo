@@ -11,6 +11,7 @@ const rows: Row[] = [
   { feature: "Per-project task overrides", kdo: true, turbo: true, nx: true, bun: false, pnpm: false },
   { feature: "Single static binary", kdo: true, turbo: false, nx: false, bun: true, pnpm: false },
   { feature: "Package install / lockfile", kdo: false, turbo: false, nx: false, bun: true, pnpm: true },
+  { feature: "Spec runs in a git worktree", kdo: true, turbo: false, nx: false, bun: false, pnpm: false },
 ];
 
 const cols: readonly Tool[] = ["kdo", "turbo", "nx", "bun", "pnpm"] as const;
@@ -24,12 +25,12 @@ const cell = (v: Cell) => {
 
 <section class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
   <div class="mx-auto max-w-2xl text-center">
-    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">honest comparison</p>
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-tide">scope</p>
     <h2 class="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-      Built for agents, not humans.
+      It does not replace your build tool.
     </h2>
     <p class="mt-5 text-lg text-ink-3">
-      Turbo, Nx, Moon, and Bun optimize for developers running builds. kdo optimizes for agents reading code. It runs alongside your package manager, not instead of it.
+      Turbo, Nx, Bun, and pnpm install and build. kdo reads those manifests so an agent can ask what depends on a project without opening every file. Keep the package manager.
     </p>
   </div>
 
@@ -67,6 +68,6 @@ const cell = (v: Cell) => {
   </div>
 
   <p class="mx-auto mt-6 max-w-2xl text-center text-xs text-ink-3">
-    ● full · ◐ partial · ○ not supported · alpha software, comparisons reflect kdo 0.1.0-alpha.3
+    Filled: yes. Half: partial. Empty: no. Checked against kdo 0.3.0-alpha.1.
   </p>
 </section>
