@@ -1,6 +1,7 @@
 //! kdo CLI — context-native workspace manager for AI agents.
 
 mod bench;
+mod chats;
 mod factory;
 mod run;
 mod setup;
@@ -173,9 +174,11 @@ enum Commands {
         from_log: Option<std::path::PathBuf>,
     },
 
-    /// Wire kdo into a coding agent's config (Claude Code or OpenClaw).
+    /// Wire kdo into a coding harness.
+    ///
+    /// Agents: `claude`, `openclaw`, `codex`, `opencode`, `grok`, `dsh`.
     Setup {
-        /// Agent to set up: `claude` or `openclaw`.
+        /// Harness to set up.
         agent: String,
 
         /// Write to user-level config instead of workspace-level.
@@ -198,6 +201,12 @@ enum Commands {
     Factory {
         #[command(subcommand)]
         command: FactoryCommand,
+    },
+
+    /// List, export, or import chats across coding harnesses.
+    Chats {
+        #[command(subcommand)]
+        command: ChatsCommand,
     },
 
     /// Show which model-provider keys are configured. Never prints secrets.
@@ -252,6 +261,39 @@ enum FactoryCommand {
     Merge {
         /// Run id.
         run_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ChatsCommand {
+    /// Print harness, id, and title. One harness, or all of them.
+    List {
+        /// `claude`, `codex`, `opencode`, `grok`, or `dsh`.
+        #[arg(long)]
+        harness: Option<String>,
+    },
+    /// Write a `.kdo.json` transcript (user and assistant text only).
+    Export {
+        /// Source harness.
+        #[arg(long)]
+        harness: String,
+        /// Session id. Omit with `--all`.
+        #[arg(long)]
+        id: Option<String>,
+        /// Export every session from the harness. Requires `-o <dir>`.
+        #[arg(long)]
+        all: bool,
+        /// Output file, `-` for stdout, or a directory with `--all`.
+        #[arg(short = 'o', long)]
+        out: Option<std::path::PathBuf>,
+    },
+    /// Write a `.kdo.json` file into another harness.
+    Import {
+        /// Destination: `claude`, `codex`, `opencode`, `grok`, or `dsh`.
+        #[arg(long)]
+        to: String,
+        /// Path to a `.kdo.json` file.
+        file: std::path::PathBuf,
     },
 }
 
@@ -345,6 +387,16 @@ fn main() -> miette::Result<()> {
             global,
             dry_run,
         } => setup::cmd_setup(&agent, global, dry_run)?,
+        Commands::Chats { command } => match command {
+            ChatsCommand::List { harness } => chats::cmd_list(harness.as_deref())?,
+            ChatsCommand::Export {
+                harness,
+                id,
+                all,
+                out,
+            } => chats::cmd_export(&harness, id.as_deref(), all, out.as_deref())?,
+            ChatsCommand::Import { to, file } => chats::cmd_import(&to, &file)?,
+        },
         Commands::Apply { file } => factory::cmd_apply(&file)?,
         Commands::Factory { command } => match command {
             FactoryCommand::Status { spec, run } => {

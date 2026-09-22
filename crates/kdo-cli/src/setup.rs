@@ -49,7 +49,13 @@ pub fn cmd_setup(agent: &str, global: bool, dry_run: bool) -> Result<()> {
     match agent {
         "claude" => plan_claude(&ctx, &mut actions)?,
         "openclaw" => plan_openclaw(&ctx, &mut actions)?,
-        other => miette::bail!("unknown agent: {other} (expected 'claude' or 'openclaw')"),
+        "codex" => plan_toml_mcp(&ctx, &mut actions, ".codex/config.toml")?,
+        "grok" | "grok-build" => plan_toml_mcp(&ctx, &mut actions, ".grok/config.toml")?,
+        "opencode" => plan_opencode(&ctx, &mut actions)?,
+        "dsh" | "deepseek" => plan_dsh(&ctx, &mut actions)?,
+        other => miette::bail!(
+            "unknown agent: {other} (claude, openclaw, codex, opencode, grok, dsh)"
+        ),
     }
 
     actions.apply(&ctx)?;
@@ -68,7 +74,14 @@ pub fn cmd_setup(agent: &str, global: bool, dry_run: bool) -> Result<()> {
                 "  {} Restart OpenClaw to pick up the skill + MCP server.",
                 "done".green()
             ),
-            _ => {}
+            "dsh" | "deepseek" => eprintln!(
+                "  {} Restart DeepSeek Harness. Settings → kdo imports a chat.",
+                "done".green()
+            ),
+            _ => eprintln!(
+                "  {} Restart the harness so it reloads the MCP server.",
+                "done".green()
+            ),
         }
     }
     Ok(())
@@ -150,6 +163,14 @@ pub(crate) enum Action {
         args: Vec<String>,
         note: &'static str,
     },
+
+    /// Append `content` when `marker` is not already in the file.
+    AppendIfAbsent {
+        path: PathBuf,
+        marker: String,
+        content: String,
+        note: &'static str,
+    },
 }
 
 impl Actions {
@@ -183,6 +204,12 @@ impl Actions {
                     args,
                     note,
                 } => run_shell(ctx, &program, &args, note)?,
+                Action::AppendIfAbsent {
+                    path,
+                    marker,
+                    content,
+                    note,
+                } => append_if_absent(ctx, &path, &marker, &content, note)?,
             }
         }
         Ok(())
@@ -654,6 +681,88 @@ Do not paste secrets here — this file is committed to the repo.
 }
 
 // ─────────────────────────── Tests ───────────────────────────
+
+fn append_if_absent(
+    ctx: &SetupCtx,
+    path: &Path,
+    marker: &str,
+    content: &str,
+    note: &str,
+) -> Result<()> {
+    let existing = if path.exists() {
+        fs::read_to_string(path).into_diagnostic()?
+    } else {
+        String::new()
+    };
+    if existing.contains(marker) {
+        print_action("keep", &path.display().to_string(), Some("already configured"));
+        return Ok(());
+    }
+    print_action("append", &path.display().to_string(), Some(note));
+    if ctx.dry_run {
+        print_content_preview(content);
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).into_diagnostic()?;
+    }
+    let sep = if existing.is_empty() || existing.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    write_to_temp_then_rename(path, format!("{existing}{sep}{content}").as_bytes())?;
+    Ok(())
+}
+
+fn mcp_toml_block() -> String {
+    "\n[mcp_servers.kdo]\ncommand = \"kdo\"\nargs = [\"serve\", \"--transport\", \"stdio\"]\n".into()
+}
+
+fn plan_toml_mcp(ctx: &SetupCtx, actions: &mut Actions, relative: &str) -> Result<()> {
+    actions.push(Action::AppendIfAbsent {
+        path: ctx.home.join(relative),
+        marker: "[mcp_servers.kdo]".into(),
+        content: mcp_toml_block(),
+        note: "mcp server",
+    });
+    Ok(())
+}
+
+fn plan_opencode(ctx: &SetupCtx, actions: &mut Actions) -> Result<()> {
+    let value = serde_json::json!({
+        "type": "local",
+        "command": ["kdo", "serve", "--transport", "stdio"],
+        "enabled": true
+    });
+    actions.push(Action::MergeJson {
+        path: ctx.home.join(".config").join("opencode").join("opencode.json"),
+        pointer: "/mcp/kdo".into(),
+        value,
+        seed: serde_json::json!({"$schema": "https://opencode.ai/config.json", "mcp": {}}),
+        note: "opencode mcp",
+    });
+    Ok(())
+}
+
+fn plan_dsh(ctx: &SetupCtx, actions: &mut Actions) -> Result<()> {
+    let root = ctx.home.join(".dsh").join("plugins").join("kdo");
+    let files: &[(&str, &str)] = &[
+        ("package.json", include_str!("dsh_plugin/package.json")),
+        ("cordis.patch.yml", include_str!("dsh_plugin/cordis.patch.yml")),
+        ("README.md", include_str!("dsh_plugin/README.md")),
+        ("lib/index.js", include_str!("dsh_plugin/index.js")),
+        ("lib/client.js", include_str!("dsh_plugin/client.js")),
+    ];
+    for (rel, content) in files {
+        actions.push(Action::WriteFile {
+            path: root.join(rel),
+            content: (*content).to_string(),
+            note: "dsh plugin",
+        });
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {

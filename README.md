@@ -319,6 +319,10 @@ kdo apply -f spec.yaml                 # Submit a factory spec
 kdo factory status|tick|daemon|logs|merge
 kdo keys status                        # Which provider keys are set
 kdo tui                                # Factory dashboard
+kdo chats list                         # Claude, Codex, OpenCode, Grok, DSH
+kdo chats export --harness claude --id <session> -o chat.kdo.json
+kdo chats import --to grok chat.kdo.json
+kdo setup dsh                          # DeepSeek Harness chat-import plugin
 ```
 
 All commands support `--format json` for scripting.
