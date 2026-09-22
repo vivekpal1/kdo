@@ -1,6 +1,6 @@
 [package]
-name = "kdo"
-description = "Context-native workspace manager for AI coding agents. Cuts token consumption on polyglot monorepos."
+name = "kdo-factory"
+description = "Embedded control plane for kdo — specs, runs, agents, reconciliation."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,33 +11,26 @@ keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
 
-[[bin]]
-name = "kdo"
-path = "src/main.rs"
-
 [dependencies]
 kdo-core = { path = "../kdo-core", version = "=0.3.0-alpha.1" }
 kdo-graph = { path = "../kdo-graph", version = "=0.3.0-alpha.1" }
 kdo-context = { path = "../kdo-context", version = "=0.3.0-alpha.1" }
-kdo-mcp = { path = "../kdo-mcp", version = "=0.3.0-alpha.1" }
-kdo-factory = { path = "../kdo-factory", version = "=0.3.0-alpha.1" }
-clap = { workspace = true }
-clap_complete = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yml = { workspace = true }
 toml = { workspace = true }
+sqlx = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
 miette = { workspace = true }
 anyhow = { workspace = true }
-tabled = { workspace = true }
-owo-colors = { workspace = true }
-indicatif = { workspace = true }
-rayon = { workspace = true }
-ignore = { workspace = true }
-globset = { workspace = true }
-ratatui = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
+tokio = { workspace = true }
 tempfile = "3"

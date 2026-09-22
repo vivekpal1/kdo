@@ -1,8 +1,10 @@
 //! kdo CLI — context-native workspace manager for AI agents.
 
 mod bench;
+mod factory;
 mod run;
 mod setup;
+mod tui;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
@@ -185,6 +187,28 @@ enum Commands {
         dry_run: bool,
     },
 
+    /// Submit a factory specification (YAML).
+    Apply {
+        /// Path to the spec YAML.
+        #[arg(short = 'f', long = "file")]
+        file: std::path::PathBuf,
+    },
+
+    /// Inspect or drive the factory reconciler.
+    Factory {
+        #[command(subcommand)]
+        command: FactoryCommand,
+    },
+
+    /// Show which model-provider keys are configured. Never prints secrets.
+    Keys {
+        #[command(subcommand)]
+        command: KeysCommand,
+    },
+
+    /// Full-screen factory dashboard (specs, runs, graph, keys).
+    Tui,
+
     /// Upgrade kdo to the latest release (or a specific version).
     Upgrade {
         /// Install a specific version (e.g. `0.1.0-alpha.3`). Default: latest release.
@@ -195,6 +219,46 @@ enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum FactoryCommand {
+    /// Show specs and runs (or a single run with `--run`).
+    Status {
+        /// Filter to a specific spec id.
+        #[arg(long)]
+        spec: Option<String>,
+        /// Show detail for a specific run id.
+        #[arg(long)]
+        run: Option<String>,
+    },
+    /// Run the reconciler one step and exit.
+    Tick,
+    /// Run the reconciler in a loop until Ctrl-C.
+    Daemon {
+        /// Poll interval (ms).
+        #[arg(long, default_value = "500")]
+        poll_ms: u64,
+    },
+    /// Stream events for a run.
+    Logs {
+        /// Run id.
+        run_id: String,
+        /// Follow until the run terminates.
+        #[arg(long, short = 'f')]
+        follow: bool,
+    },
+    /// Retry merging a run that is waiting on a clean checkout.
+    Merge {
+        /// Run id.
+        run_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum KeysCommand {
+    /// Print each provider and whether a key is set.
+    Status,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -281,6 +345,20 @@ fn main() -> miette::Result<()> {
             global,
             dry_run,
         } => setup::cmd_setup(&agent, global, dry_run)?,
+        Commands::Apply { file } => factory::cmd_apply(&file)?,
+        Commands::Factory { command } => match command {
+            FactoryCommand::Status { spec, run } => {
+                factory::cmd_status(spec.as_deref(), run.as_deref())?
+            }
+            FactoryCommand::Tick => factory::cmd_tick()?,
+            FactoryCommand::Daemon { poll_ms } => factory::cmd_daemon(poll_ms)?,
+            FactoryCommand::Logs { run_id, follow } => factory::cmd_logs(&run_id, follow)?,
+            FactoryCommand::Merge { run_id } => factory::cmd_merge(&run_id)?,
+        },
+        Commands::Keys { command } => match command {
+            KeysCommand::Status => factory::cmd_keys_status()?,
+        },
+        Commands::Tui => tui::cmd_tui()?,
         Commands::Upgrade { version, dry_run } => cmd_upgrade(version.as_deref(), dry_run)?,
     }
 
@@ -1028,6 +1106,10 @@ fn cmd_doctor() -> miette::Result<()> {
             issues += 1;
         }
     }
+
+    let (factory_issues, factory_warnings) = factory::doctor(&root);
+    issues += factory_issues;
+    warnings += factory_warnings;
 
     eprintln!();
     if issues > 0 {

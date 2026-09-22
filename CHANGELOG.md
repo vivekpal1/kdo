@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.1] - 2026-09-22
+
+### Added
+
+- **Factory loop.** `kdo apply -f spec.yaml` submits a spec. `kdo factory tick` and `kdo factory daemon` run plan, implement, test, and review. Agents edit a git worktree under `.kdo/worktrees/<run>/`. A passing review merges onto the current branch only when that checkout is clean outside `.kdo/`. A dirty tree stays `awaiting_merge` until `kdo factory merge <run-id>`.
+- **Plugins.** TOML providers and micro-agents in `~/.kdo/plugins/` and `.kdo/plugins/`. Built-ins: Anthropic, any OpenAI-compatible endpoint, and the planner, implementer, reviewer, and command-only tester.
+- **Bring your own keys.** Environment variables win, then `~/.kdo/credentials.toml`. `kdo keys status` prints `set` or `missing` and never the secret. With no keys, or with `KDO_FACTORY_MOCK=1`, the mock provider runs the loop offline.
+- **`kdo tui`.** Specs, runs, tasks, events, a one-line graph summary, and key status.
+
+### Not in this alpha
+
+- No live-provider certification in CI. The mock loop is what the tests run.
+- No pull requests, Docker sandboxes, or native plugins.
+
 ## [0.2.0-alpha.1] - 2026-04-16 (staged)
 
 ### Added — agent runtime
@@ -140,7 +154,8 @@ First public alpha. Expect breakage. API surface is not stable.
 - Colored CLI output (owo-colors) and progress bars (indicatif)
 - Integration test suite against `fixtures/sample-monorepo`
 
-[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/vivekpal1/kdo/compare/v0.3.0-alpha.1...HEAD
+[0.3.0-alpha.1]: https://github.com/vivekpal1/kdo/compare/v0.2.0-alpha.1...v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.3...v0.2.0-alpha.1
 [0.1.0-alpha.3]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/vivekpal1/kdo/compare/v0.1.0-alpha.1...v0.1.0-alpha.2

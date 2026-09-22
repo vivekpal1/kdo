@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["fixtures"]
 
 [workspace.package]
-version = "0.2.0-alpha.1"
+version = "0.3.0-alpha.1"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -45,6 +45,20 @@ grep-searcher = "0.1"
 globset = "0.4"
 rmcp = { version = "0.16.0", features = ["server", "transport-io", "macros"] }
 schemars = "0.8"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "macros",
+    "chrono",
+    "uuid",
+] }
+async-trait = "0.1"
+serde_yml = "0.0.12"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+futures = "0.3"
+ratatui = "0.28.1"
 
 [profile.release]
 lto = "thin"

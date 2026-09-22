@@ -1,0 +1,21 @@
+kind: Feature
+metadata:
+  name: hello-world
+  project: common-lib
+spec:
+  description: |
+    Add a `hello()` function to common-lib that returns the string
+    "hello from kdo factory". Cover with one unit test.
+  acceptance:
+    - hello() exists in common-lib/src/lib.rs
+    - hello() returns the literal string "hello from kdo factory"
+    - cargo test passes for the new test
+  budget:
+    max_tokens: 50000
+    max_iterations: 4
+    max_cost_usd: 1.50
+  agents:
+    planner: claude-opus-4-7
+    implementer: claude-sonnet-4-6
+    reviewer: claude-sonnet-4-6
+    tester: claude-haiku-4-5

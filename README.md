@@ -27,7 +27,7 @@ curl -fsSL https://vivekpal1.github.io/kdo/install.sh | bash -s -- --from-releas
 **From crates.io (requires the version flag for pre-releases):**
 
 ```bash
-cargo install kdo --version "0.2.0-alpha.1"
+cargo install kdo --version "0.3.0-alpha.1"
 ```
 
 > `cargo install kdo` without `--version` fails with "could not find `kdo` in registry"
@@ -95,6 +95,12 @@ kdo completions zsh >> ~/.zshrc
 
 # Start MCP server for AI agents
 kdo serve --transport stdio
+
+# Run a spec through the factory (worktree, review, merge)
+kdo apply -f spec.yaml
+kdo factory daemon
+kdo tui
+kdo keys status
 ```
 
 ## How it works
@@ -205,7 +211,50 @@ graph LR
 | `kdo-graph` | `WorkspaceGraph` via petgraph, discovery, DFS/BFS queries, blake3 hashing, cycle detection |
 | `kdo-context` | Tree-sitter signature extraction, context generation, token budget enforcement |
 | `kdo-mcp` | MCP server (built on rmcp 0.16), 7 tools, resources, loop-guard, agent profiles |
-| `kdo-cli` | Clap subcommands, interactive scaffolding, tabled output |
+| `kdo-factory` | In-process factory: specs, plugins, keys, worktrees, review-gated merge |
+| `kdo-cli` | Clap subcommands, `kdo tui`, interactive scaffolding, tabled output |
+
+## Factory
+
+`kdo` can run a spec without you sitting in the loop. Agents plan and implement inside a git worktree at `.kdo/worktrees/<run>/`. The built-in tester runs the workspace `test` task from `kdo.toml`. The reviewer returns `{"pass": true}` or `{"pass": false}`. A pass merges onto the current branch only when that checkout has no changes outside `.kdo/`. A dirty tree leaves the run in `awaiting_merge`. `kdo factory merge <run-id>` retries it.
+
+```bash
+kdo apply -f specs/hello.yaml
+kdo factory tick          # one reconciler step
+kdo factory daemon        # until Ctrl-C
+kdo factory status
+kdo factory logs <run-id>
+kdo tui                   # specs, runs, tasks, graph, keys
+```
+
+Keys are yours. `kdo keys status` prints `set` or `missing` and never the secret. Resolution order is the environment variable named by the provider, then `~/.kdo/credentials.toml` (mode `0600`):
+
+```toml
+[keys]
+anthropic = "sk-ant-..."
+openai = "sk-..."
+deepseek = "sk-..."
+```
+
+With no keys configured, the factory uses a mock provider so you can see the loop. `KDO_FACTORY_MOCK=1` forces that. If any key is set and the model's key is missing, the run fails instead of silently mocking.
+
+Plugins are TOML, not native code. Drop them in `~/.kdo/plugins/` or `.kdo/plugins/`. A later file with the same provider name or agent role wins.
+
+```toml
+[plugin]
+name = "deepseek"
+kind = "provider"
+
+[provider]
+protocol = "openai"
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+models = ["deepseek-chat"]
+```
+
+An agent plugin replaces a built-in role (`planner`, `implementer`, `tester`, `reviewer`) and may only name the built-in tools `graph`, `read`, `write`, `diff`, and `run`. `write` cannot leave the worktree. `run` executes a named `kdo.toml` task, not a shell string from the model. The built-in tester is command-only. Replace it with an agent plugin when you want a model in that seat.
+
+Prompts include the workspace graph and, when `metadata.project` resolves, a token-budgeted context bundle.
 
 ## Agent setup
 
@@ -266,6 +315,10 @@ kdo affected [--base ref]             # Changed projects since ref
 kdo doctor                            # Validate workspace health
 kdo completions <shell>               # Generate shell completions
 kdo serve [--transport stdio]         # Start MCP server
+kdo apply -f spec.yaml                 # Submit a factory spec
+kdo factory status|tick|daemon|logs|merge
+kdo keys status                        # Which provider keys are set
+kdo tui                                # Factory dashboard
 ```
 
 All commands support `--format json` for scripting.

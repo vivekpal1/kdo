@@ -42,6 +42,7 @@ jobs:
           publish kdo-graph
           publish kdo-context
           publish kdo-mcp
+          publish kdo-factory
           publish kdo
 
   build-binaries:

@@ -329,4 +329,22 @@ kdo affected [--base ref]             Changed projects since ref
 kdo doctor                            Workspace health check
 kdo completions <shell>               Shell completions
 kdo serve [--transport stdio]         Start MCP server
+kdo apply -f spec.yaml                 Submit a factory spec
+kdo factory status|tick|daemon|logs|merge
+kdo keys status                        Which provider keys are set
+kdo tui                                Factory dashboard
 ```
+
+## Factory
+
+Use the factory when the user wants a spec executed by micro-agents instead of one interactive session.
+
+```bash
+kdo apply -f spec.yaml
+kdo factory daemon
+kdo tui
+kdo keys status
+kdo factory merge <run-id>    # only after the checkout is clean
+```
+
+Agents write only under `.kdo/worktrees/<run>/`. A passing review merges that branch onto the current checkout when `git status` is clean outside `.kdo/`. Do not tell the user to put API keys in the repo. Keys live in the environment or `~/.kdo/credentials.toml`. Plugins are TOML files in `.kdo/plugins/` or `~/.kdo/plugins/` (`kind = "provider"` or `kind = "agent"`). `kdo keys status` prints `set` or `missing`, never the secret.

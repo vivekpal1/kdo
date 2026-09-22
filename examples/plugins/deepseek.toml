@@ -1,0 +1,12 @@
+# Copy to .kdo/plugins/deepseek.toml or ~/.kdo/plugins/deepseek.toml
+# Put the key in DEEPSEEK_API_KEY or ~/.kdo/credentials.toml under [keys] deepseek.
+
+[plugin]
+name = "deepseek"
+kind = "provider"
+
+[provider]
+protocol = "openai"
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+models = ["deepseek-chat", "deepseek-reasoner"]
